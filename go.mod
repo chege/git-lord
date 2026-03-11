@@ -1,4 +1,4 @@
-module github.com/christopher/git-lord
+module github.com/chege/git-lord
 
 go 1.25.5
 

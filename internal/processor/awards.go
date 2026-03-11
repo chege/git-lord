@@ -17,7 +17,7 @@ func ProcessAwards(res models.Result) []models.Award {
 	minNet := 0
 	for _, a := range authors {
 		net := a.LifetimeAdditions - a.LifetimeDeletions
-		if a.LifetimeDeletions > 50 && net < minNet {
+		if a.LifetimeDeletions > models.JanitorDeletionThreshold && net < minNet {
 			minNet = net
 			janitor = a
 		}
@@ -59,7 +59,7 @@ func ProcessAwards(res models.Result) []models.Award {
 	var novelist *models.AuthorMetrics
 	maxWords := 0
 	for _, a := range authors {
-		if a.Commits >= 5 {
+		if a.Commits >= models.NovelistCommitThreshold {
 			avg := a.MessageWords / a.Commits
 			if avg > maxWords {
 				maxWords = avg
@@ -79,7 +79,28 @@ func ProcessAwards(res models.Result) []models.Award {
 		})
 	}
 
-	// 4. THE SPEED DEMON
+	// 4. THE CLOSER
+	var closer *models.AuthorMetrics
+	maxMerges := 0
+	for _, a := range authors {
+		if a.MergeCommits > maxMerges {
+			maxMerges = a.MergeCommits
+			closer = a
+		}
+	}
+	if closer != nil {
+		awards = append(awards, models.Award{
+			ID:          "closer",
+			Title:       "The Closer",
+			Emoji:       "🏁",
+			Winner:      closer.Name,
+			Vibe:        "The reliable finisher who clears the board.",
+			Description: "Awarded for the highest number of merge commits.",
+			Value:       fmt.Sprintf("%d merges", maxMerges),
+		})
+	}
+
+	// 5. THE SPEED DEMON
 	var speedDemon *models.AuthorMetrics
 	minInterval := float64(math.MaxInt64)
 	for _, a := range authors {
@@ -107,7 +128,7 @@ func ProcessAwards(res models.Result) []models.Award {
 		})
 	}
 
-	// 5. THE POLISHED GEM
+	// 6. THE POLISHED GEM
 	var gem *models.AuthorMetrics
 	maxRatio := 0.0
 	for _, a := range authors {
@@ -131,7 +152,7 @@ func ProcessAwards(res models.Result) []models.Award {
 		})
 	}
 
-	// 6. THE GHOST OF CHRISTMAS PAST
+	// 7. THE GHOST OF CHRISTMAS PAST
 	var ghost *models.AuthorMetrics
 	maxGhostLoc := 0
 	ninetyDaysAgo := time.Now().AddDate(0, 0, -90).Unix()
@@ -155,7 +176,7 @@ func ProcessAwards(res models.Result) []models.Award {
 		})
 	}
 
-	// 7. THE FRIDAY ROULETTE
+	// 8. THE FRIDAY ROULETTE
 	var gambler *models.AuthorMetrics
 	maxFriday := 0
 	for _, a := range authors {
@@ -176,7 +197,28 @@ func ProcessAwards(res models.Result) []models.Award {
 		})
 	}
 
-	// 8. THE DEEP THINKER
+	// 9. THE REBEL
+	var rebel *models.AuthorMetrics
+	maxLint := 0
+	for _, a := range authors {
+		if a.LintCommits > maxLint {
+			maxLint = a.LintCommits
+			rebel = a
+		}
+	}
+	if rebel != nil {
+		awards = append(awards, models.Award{
+			ID:          "rebel",
+			Title:       "The Rebel",
+			Emoji:       "🎸",
+			Winner:      rebel.Name,
+			Vibe:        "Writes code first, asks the linter for permission later.",
+			Description: "Awarded for the most 'Fix Lint' or 'Fix Style' commit messages.",
+			Value:       fmt.Sprintf("%d lint-fix commits", maxLint),
+		})
+	}
+
+	// 10. THE DEEP THINKER
 	var thinker *models.AuthorMetrics
 	maxGap := 0
 	for _, a := range authors {
@@ -197,12 +239,12 @@ func ProcessAwards(res models.Result) []models.Award {
 		})
 	}
 
-	// 9. THE STEALTH SPECIALIST
+	// 11. THE STEALTH SPECIALIST
 	var stealth *models.AuthorMetrics
 	minVelocity := 100.0
 	for _, a := range authors {
 		activeDays := len(a.ActiveDays)
-		if activeDays > 10 { // Threshold: Must be a long-term contributor
+		if activeDays > models.StealthActiveDayThreshold {
 			velocity := float64(a.LifetimeAdditions+a.LifetimeDeletions) / float64(activeDays)
 			if velocity < 1.5 {
 				if velocity < minVelocity {
