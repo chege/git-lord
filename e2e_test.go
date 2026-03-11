@@ -108,8 +108,8 @@ func TestE2E_BasicMetrics(t *testing.T) {
 	if alice == nil {
 		t.Fatalf("Alice not found in output: %s", output)
 	}
-	// Alice: loc=3, coms=1, fils=1, hrs=1, months=1
-	if alice[1] != "3" || alice[3] != "1" || alice[4] != "1" {
+	// Alice: loc=3, retention=100.0, coms=1, fils=1, exclusive=0 (shared file1.txt)
+	if alice[1] != "3" || alice[2] != "100.0" || alice[3] != "1" || alice[4] != "1" || alice[5] != "0" {
 		t.Errorf("Alice metrics incorrect: %v", alice)
 	}
 
@@ -117,9 +117,33 @@ func TestE2E_BasicMetrics(t *testing.T) {
 	if bob == nil {
 		t.Fatalf("Bob not found in output: %s", output)
 	}
-	// Bob: loc=3, coms=1, fils=2, hrs=1, months=1
-	if bob[1] != "3" || bob[3] != "1" || bob[4] != "2" {
+	// Bob: loc=3, retention=100.0, coms=1, fils=2, exclusive=1 (owns file2.txt)
+	if bob[1] != "3" || bob[2] != "100.0" || bob[3] != "1" || bob[4] != "2" || bob[5] != "1" {
 		t.Errorf("Bob metrics incorrect: %v", bob)
+	}
+}
+
+func TestE2E_Pulse(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	defer func() { _ = os.RemoveAll(repoDir) }()
+
+	binPath := buildGitLord(t)
+
+	cmd := exec.Command(binPath, "pulse", "--format", "csv")
+	cmd.Dir = repoDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git-lord pulse failed: %v\nOutput: %s", err, string(out))
+	}
+
+	output := string(out)
+	// Pulse CSV header: Author,commits,additions,deletions,churn,files
+	if !strings.Contains(output, "Author,commits,additions,deletions,churn,files") {
+		t.Errorf("Pulse CSV header missing: %s", output)
+	}
+
+	if !strings.Contains(output, "Alice,1,+3,-0,3,1") {
+		t.Errorf("Alice pulse metrics incorrect: %s", output)
 	}
 }
 

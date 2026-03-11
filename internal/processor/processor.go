@@ -132,6 +132,17 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 		if len(result.AuthorLines) > 0 {
 			global.TotalFiles++
 		}
+		// If only one author owns code in this file, it's an exclusive silo
+		if len(result.AuthorLines) == 1 {
+			for email := range result.AuthorLines {
+				id := email
+				if _, ok := authors[id]; !ok {
+					authors[id] = &models.AuthorMetrics{Name: email, Email: email}
+				}
+				authors[id].ExclusiveFiles++
+			}
+		}
+
 		for email, lines := range result.AuthorLines {
 			id := email
 			if _, ok := authors[id]; !ok {
@@ -156,9 +167,36 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 	}
 
 	global.TotalMonths = metrics.CalculateMonths(allTimestamps)
+	global.BusFactor = calculateBusFactor(authors, global.TotalLoc)
 
 	return models.Result{
 		Authors: authors,
 		Global:  global,
 	}
+}
+
+func calculateBusFactor(authors map[string]*models.AuthorMetrics, totalLoc int) int {
+	if totalLoc == 0 {
+		return 0
+	}
+
+	// Sort authors by LOC descending
+	var locs []int
+	for _, a := range authors {
+		locs = append(locs, a.Loc)
+	}
+	sort.Sort(sort.Reverse(sort.IntSlice(locs)))
+
+	count := 0
+	runningSum := 0
+	threshold := totalLoc / 2
+
+	for _, loc := range locs {
+		runningSum += loc
+		count++
+		if runningSum > threshold {
+			break
+		}
+	}
+	return count
 }

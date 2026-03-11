@@ -9,6 +9,7 @@ type AuthorMetrics struct {
 	Loc               int
 	Commits           int
 	Files             int
+	ExclusiveFiles    int
 	Hours             int
 	Months            int
 	FirstCommit       int64
@@ -18,11 +19,12 @@ type AuthorMetrics struct {
 
 // GlobalMetrics holds the sum of all metrics.
 type GlobalMetrics struct {
-	TotalLoc     int
-	TotalCommits int
-	TotalFiles   int
-	TotalHours   int
-	TotalMonths  int
+	TotalLoc       int
+	TotalCommits   int
+	TotalFiles     int
+	TotalHours     int
+	TotalMonths    int
+	BusFactor      int
 }
 
 // Result holds the final processed data.

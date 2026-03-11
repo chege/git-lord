@@ -23,14 +23,23 @@ type config struct {
 }
 
 func main() {
-	flag.Usage = func() {
+	// Root flag set (default/leaderboard)
+	rootFs := flag.NewFlagSet("git-lord", flag.ExitOnError)
+	cfg := config{}
+	setupFlags(rootFs, &cfg)
+
+	// Pulse flag set
+	pulseFs := flag.NewFlagSet("pulse", flag.ExitOnError)
+	setupFlags(pulseFs, &cfg)
+
+	rootFs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: git-lord [command] [options]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
 		fmt.Fprintf(os.Stderr, "  (default)  Compute all-time ownership leaderboard\n")
 		fmt.Fprintf(os.Stderr, "  pulse      Compute recent activity metrics (velocity/churn)\n")
 		fmt.Fprintf(os.Stderr, "  help       Show this help screen\n\n")
 		fmt.Fprintf(os.Stderr, "Global Options:\n")
-		flag.PrintDefaults()
+		rootFs.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nOutput Columns (Leaderboard):\n")
 		fmt.Fprintf(os.Stderr, "  AUTHOR        Contributor's name.\n")
 		fmt.Fprintf(os.Stderr, "  LOC           Current surviving lines of code attributed to the author.\n")
@@ -38,43 +47,43 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  COMMITS       Total number of commits by the author.\n")
 		fmt.Fprintf(os.Stderr, "  DISTRIBUTION  Percentage share of total [LOC / COMMITS / FILES].\n")
 	}
+	pulseFs.Usage = rootFs.Usage
 
-	cfg := config{}
-	flag.StringVar(&cfg.Sort, "sort", "loc", "Sort metric: loc, coms, fils, hrs")
-	flag.StringVar(&cfg.Since, "since", "", "Filter by date (e.g., '2023-01-01', '2 weeks ago')")
-	flag.StringVar(&cfg.Include, "include", "", "Include glob pattern")
-	flag.StringVar(&cfg.Exclude, "exclude", "", "Exclude glob pattern")
-	flag.StringVar(&cfg.Format, "format", "table", "Output format: table, json, csv")
-	flag.BoolVar(&cfg.NoHours, "no-hours", false, "Disable hours calculation")
-	flag.BoolVar(&cfg.NoProgress, "no-progress", false, "Disable progress bar")
-	flag.IntVar(&cfg.Days, "days", 30, "Window in days for the 'pulse' command")
-
-	flag.Parse()
-
-	args := flag.Args()
-	cmd := ""
-	if len(args) > 0 {
-		cmd = args[0]
-	}
-
-	// Handle 'help' command or sub-command help
-	if cmd == "help" {
-		flag.Usage()
+	if len(os.Args) < 2 {
+		_ = rootFs.Parse(os.Args[1:])
+		handleError(runLeaderboard(cfg))
 		return
 	}
 
-	var err error
+	cmd := os.Args[1]
 	switch cmd {
 	case "pulse":
-		// Pulse defaults to cfg.Days if cfg.Since is not specified
+		_ = pulseFs.Parse(os.Args[2:])
 		if cfg.Since == "" {
 			cfg.Since = fmt.Sprintf("%d days ago", cfg.Days)
 		}
-		err = runPulse(cfg)
+		handleError(runPulse(cfg))
+	case "help", "-h", "--help":
+		rootFs.Usage()
 	default:
-		err = runLeaderboard(cfg)
+		// Default to leaderboard if not a known command
+		_ = rootFs.Parse(os.Args[1:])
+		handleError(runLeaderboard(cfg))
 	}
+}
 
+func setupFlags(fs *flag.FlagSet, cfg *config) {
+	fs.StringVar(&cfg.Sort, "sort", "loc", "Sort metric: loc, coms, fils, hrs")
+	fs.StringVar(&cfg.Since, "since", "", "Filter by date (e.g., '2023-01-01', '2 weeks ago')")
+	fs.StringVar(&cfg.Include, "include", "", "Include glob pattern")
+	fs.StringVar(&cfg.Exclude, "exclude", "", "Exclude glob pattern")
+	fs.StringVar(&cfg.Format, "format", "table", "Output format: table, json, csv")
+	fs.BoolVar(&cfg.NoHours, "no-hours", false, "Disable hours calculation")
+	fs.BoolVar(&cfg.NoProgress, "no-progress", false, "Disable progress bar")
+	fs.IntVar(&cfg.Days, "days", 30, "Window in days for the 'pulse' command")
+}
+
+func handleError(err error) {
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		os.Exit(1)
@@ -131,7 +140,15 @@ func runPulse(cfg config) error {
 	}
 
 	stats := processor.ProcessPulse(commits)
-	format.PrintPulse(stats)
+
+	switch cfg.Format {
+	case "json":
+		return format.PrintPulseJSON(stats)
+	case "csv":
+		return format.PrintPulseCSV(stats)
+	default:
+		format.PrintPulse(stats)
+	}
 	return nil
 }
 

@@ -43,6 +43,7 @@ func getColumns(global models.GlobalMetrics, noHours bool) []column {
 		{Header: "Retention", ValueFunc: func(p models.AuthorStat) string { return fmt.Sprintf("%.1f%%", p.Retention) }},
 		{Header: "Commits", ValueFunc: func(p models.AuthorStat) string { return fmt.Sprintf("%d", p.Commits) }, Footer: fmt.Sprintf("%d", global.TotalCommits)},
 		{Header: "Files", ValueFunc: func(p models.AuthorStat) string { return fmt.Sprintf("%d", p.Files) }, Footer: fmt.Sprintf("%d", global.TotalFiles)},
+		{Header: "Exclusive", ValueFunc: func(p models.AuthorStat) string { return fmt.Sprintf("%d", p.ExclusiveFiles) }, Footer: fmt.Sprintf("Bus Factor: %d", global.BusFactor)},
 	}
 
 	if !noHours {
@@ -172,7 +173,7 @@ func PrintPulse(stats []models.PulseStat) {
 // PrintJSON formats the stats to JSON.
 func PrintJSON(stats []models.AuthorStat, global models.GlobalMetrics) error {
 	data := struct {
-		Authors []models.AuthorStat `json:"authors"`
+		Authors []models.AuthorStat  `json:"authors"`
 		Global  models.GlobalMetrics `json:"global"`
 	}{
 		Authors: stats,
@@ -184,12 +185,44 @@ func PrintJSON(stats []models.AuthorStat, global models.GlobalMetrics) error {
 	return encoder.Encode(data)
 }
 
+// PrintPulseJSON formats the recent activity stats to JSON.
+func PrintPulseJSON(stats []models.PulseStat) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(stats)
+}
+
+// PrintPulseCSV formats the recent activity stats to CSV.
+func PrintPulseCSV(stats []models.PulseStat) error {
+	w := csv.NewWriter(os.Stdout)
+	header := []string{"Author", "commits", "additions", "deletions", "churn", "files"}
+	if err := w.Write(header); err != nil {
+		return err
+	}
+
+	for _, p := range stats {
+		row := []string{
+			p.Name,
+			fmt.Sprintf("%d", p.Commits),
+			fmt.Sprintf("+%d", p.Additions),
+			fmt.Sprintf("-%d", p.Deletions),
+			fmt.Sprintf("%d", p.Churn),
+			fmt.Sprintf("%d", p.Files),
+		}
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+	w.Flush()
+	return w.Error()
+}
+
 // PrintCSV formats the stats to CSV.
 func PrintCSV(stats []models.AuthorStat, noHours bool) error {
 	w := csv.NewWriter(os.Stdout)
 
 	// CSV header
-	header := []string{"Author", "loc", "retention", "coms", "fils"}
+	header := []string{"Author", "loc", "retention", "coms", "fils", "exclusive"}
 	if !noHours {
 		header = append(header, "hours", "months")
 	}
@@ -205,6 +238,7 @@ func PrintCSV(stats []models.AuthorStat, noHours bool) error {
 			fmt.Sprintf("%.1f", p.Retention),
 			fmt.Sprintf("%d", p.Commits),
 			fmt.Sprintf("%d", p.Files),
+			fmt.Sprintf("%d", p.ExclusiveFiles),
 		}
 		if !noHours {
 			row = append(row, fmt.Sprintf("%d", p.Hours), fmt.Sprintf("%d", p.Months))
