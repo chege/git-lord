@@ -111,16 +111,6 @@ func getColumns(global models.GlobalMetrics, cfg models.Config) []column {
 	return cols
 }
 
-func newTableWriter(headerColor text.Color) table.Writer {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(table.StyleRounded)
-	t.Style().Options.SeparateRows = false
-	t.Style().Format.Header = text.FormatUpper
-	t.Style().Color.Header = text.Colors{headerColor, text.Bold}
-	return t
-}
-
 // GenerateStats converts models.Result into a sorted slice of AuthorStat.
 func GenerateStats(result models.Result, cfg models.Config) []models.AuthorStat {
 	var stats []models.AuthorStat
@@ -144,7 +134,7 @@ func GenerateStats(result models.Result, cfg models.Config) []models.AuthorStat 
 		}
 
 		// Award "Code Janitor" badge 🧹
-		if stat.LifetimeDeletions > models.JanitorDeletionThreshold && stat.LifetimeDeletions > stat.LifetimeAdditions {
+		if stat.LifetimeDeletions > 50 && stat.LifetimeDeletions > stat.LifetimeAdditions {
 			stat.Badges = append(stat.Badges, "🧹")
 		}
 
@@ -171,7 +161,12 @@ func GenerateStats(result models.Result, cfg models.Config) []models.AuthorStat 
 
 // PrintTable formats the stats like git-fame.
 func PrintTable(stats []models.AuthorStat, global models.GlobalMetrics, cfg models.Config) {
-	t := newTableWriter(text.FgCyan)
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleRounded)
+	t.Style().Options.SeparateRows = false
+	t.Style().Format.Header = text.FormatUpper
+	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
 	t.Style().Color.IndexColumn = text.Colors{text.FgHiCyan}
 
 	cols := getColumns(global, cfg)
@@ -203,7 +198,12 @@ func PrintTable(stats []models.AuthorStat, global models.GlobalMetrics, cfg mode
 
 // PrintPulse formats the recent activity stats.
 func PrintPulse(stats []models.PulseStat) {
-	t := newTableWriter(text.FgCyan)
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleRounded)
+	t.Style().Options.SeparateRows = false
+	t.Style().Format.Header = text.FormatUpper
+	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
 
 	cols := getPulseColumns()
 	headerRow := make(table.Row, len(cols))
@@ -230,7 +230,12 @@ func PrintSilos(silos []models.SiloRecord) {
 		return
 	}
 
-	t := newTableWriter(text.FgRed)
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleRounded)
+	t.Style().Options.SeparateRows = false
+	t.Style().Format.Header = text.FormatUpper
+	t.Style().Color.Header = text.Colors{text.FgRed, text.Bold}
 
 	t.AppendHeader(table.Row{"Risk Level", "File Path", "LOC", "Primary Owner", "Ownership"})
 
@@ -253,7 +258,12 @@ func PrintSilos(silos []models.SiloRecord) {
 
 // PrintTrends formats the repository growth trends.
 func PrintTrends(trends []models.TrendStat) {
-	t := newTableWriter(text.FgCyan)
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleRounded)
+	t.Style().Options.SeparateRows = false
+	t.Style().Format.Header = text.FormatUpper
+	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
 
 	t.AppendHeader(table.Row{"Month", "Additions", "Deletions", "Net Change"})
 
@@ -275,7 +285,12 @@ func PrintTrends(trends []models.TrendStat) {
 
 // PrintLegacy formats the code age report.
 func PrintLegacy(stats []models.LegacyStat) {
-	t := newTableWriter(text.FgCyan)
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleRounded)
+	t.Style().Options.SeparateRows = false
+	t.Style().Format.Header = text.FormatUpper
+	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
 
 	t.AppendHeader(table.Row{"Year", "LOC", "Share (%)"})
 

@@ -2,13 +2,6 @@ package models
 
 import "github.com/chege/git-lord/internal/gitcmd"
 
-// Award Thresholds
-const (
-	JanitorDeletionThreshold = 50
-	NovelistCommitThreshold  = 5
-	StealthActiveDayThreshold = 10
-)
-
 // Config holds global and command-specific configuration.
 type Config struct {
 	Sort       string

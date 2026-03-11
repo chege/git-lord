@@ -1,11 +1,9 @@
 package processor
 
 import (
-	"context"
 	"runtime"
 	"testing"
 
-	"github.com/chege/git-lord/internal/gitcmd"
 	"github.com/chege/git-lord/internal/models"
 )
 
@@ -79,32 +77,31 @@ func BenchmarkProcessRepository(b *testing.B) {
 	for i := 0; i < 20; i++ {
 		files[i] = "internal/processor/processor.go"
 	}
-	commits := []gitcmd.CommitData{} 
+	commits := []models.CommitData{} 
 
 	numCPU := runtime.NumCPU()
-	ctx := context.Background()
 
 	b.Run("NumCPUx1", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = ProcessRepository(ctx, files, commits, false, numCPU)
+			_ = ProcessRepository(files, commits, false, numCPU)
 		}
 	})
 
 	b.Run("NumCPUx2", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = ProcessRepository(ctx, files, commits, false, numCPU*2)
+			_ = ProcessRepository(files, commits, false, numCPU*2)
 		}
 	})
 
 	b.Run("NumCPUx4", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = ProcessRepository(ctx, files, commits, false, numCPU*4)
+			_ = ProcessRepository(files, commits, false, numCPU*4)
 		}
 	})
 
 	b.Run("NumCPUx8", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = ProcessRepository(ctx, files, commits, false, numCPU*8)
+			_ = ProcessRepository(files, commits, false, numCPU*8)
 		}
 	})
 }

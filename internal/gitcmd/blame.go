@@ -3,11 +3,9 @@ package gitcmd
 import (
 	"bufio"
 	"bytes"
-	"context"
 	"fmt"
 	"os/exec"
 	"strings"
-	"time"
 )
 
 // BlameData holds the timestamps of lines per author for a specific file.
@@ -16,24 +14,18 @@ type BlameData struct {
 }
 
 // GetBlame parsers git blame natively overhead-free.
-func GetBlame(ctx context.Context, filePath string) (BlameData, error) {
+func GetBlame(filePath string) (BlameData, error) {
 	data := BlameData{
 		AuthorLines: make(map[string][]int64),
 	}
 
-	// Add a safety timeout per file
-	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
-	defer cancel()
-
-	cmd := exec.CommandContext(ctx, "git", "blame", "--line-porcelain", filePath)
+	cmd := exec.Command("git", "blame", "--line-porcelain", filePath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
 	err := cmd.Run()
 	if err != nil {
-		// git blame exits with non-zero on some empty files, which we can ignore.
-		// However, we should return other legitimate errors.
 		if !strings.Contains(stderr.String(), "no such path") &&
 			!strings.Contains(stderr.String(), "has no contents") {
 			return data, fmt.Errorf("git blame failed for %s: %w, stderr: %s", filePath, err, stderr.String())
@@ -72,7 +64,6 @@ func GetBlame(ctx context.Context, filePath string) (BlameData, error) {
 			currentHash = parts[0]
 		} else if strings.HasPrefix(line, "author-mail ") {
 			email := strings.TrimPrefix(line, "author-mail ")
-			email = strings.TrimSpace(email)
 			email = strings.Trim(email, "<>")
 			currentAuthorEmail = strings.ToLower(email)
 			hashToEmail[currentHash] = currentAuthorEmail
