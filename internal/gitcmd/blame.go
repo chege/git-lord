@@ -1,10 +1,10 @@
 package gitcmd
 
 import (
-	"fmt"
+	"bufio"
+	"bytes"
+	"os/exec"
 	"strings"
-
-	"github.com/go-git/go-git/v5"
 )
 
 // BlameData holds the counts of lines per author for a specific file.
@@ -18,29 +18,39 @@ func GetBlame(filePath string) (BlameData, error) {
 		AuthorLines: make(map[string]int),
 	}
 
-	repo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{DetectDotGit: true})
-	if err != nil {
-		return data, fmt.Errorf("failed to open repo: %v", err)
-	}
+	cmd := exec.Command("git", "blame", "--line-porcelain", filePath)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
 
-	head, err := repo.Head()
-	if err != nil {
-		return data, fmt.Errorf("failed to get head: %v", err)
-	}
+	_ = cmd.Run() // Ignore error as git blame exits with non-zero on some empty files
 
-	commit, err := repo.CommitObject(head.Hash())
-	if err != nil {
-		return data, fmt.Errorf("failed to get commit: %v", err)
-	}
+	scanner := bufio.NewScanner(&stdout)
+	var currentHash, currentAuthorEmail string
+	hashToEmail := make(map[string]string)
 
-	res, err := git.Blame(commit, filePath)
-	if err != nil {
-		return data, err
-	}
-
-	for _, line := range res.Lines {
-		if strings.TrimSpace(line.Text) != "" {
-			data.AuthorLines[line.Author]++
+	for scanner.Scan() {
+		line := scanner.Text()
+		if strings.HasPrefix(line, "\t") {
+			// This is the actual code line
+			email := currentAuthorEmail
+			if email == "" {
+				email = hashToEmail[currentHash]
+			}
+			if email != "" && !strings.Contains(email, "not.committed.yet") {
+				data.AuthorLines[email]++
+			}
+			// Reset for the next blame block
+			currentHash = ""
+			currentAuthorEmail = ""
+		} else if currentHash == "" {
+			// First line of a block starts with the commit hash
+			parts := strings.SplitN(line, " ", 2)
+			currentHash = parts[0]
+		} else if strings.HasPrefix(line, "author-mail ") {
+			email := strings.TrimPrefix(line, "author-mail ")
+			email = strings.Trim(email, "<>")
+			currentAuthorEmail = strings.ToLower(email)
+			hashToEmail[currentHash] = currentAuthorEmail
 		}
 	}
 

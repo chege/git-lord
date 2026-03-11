@@ -1,12 +1,11 @@
 package gitcmd
 
 import (
+	"bufio"
+	"bytes"
 	"fmt"
+	"os/exec"
 	"strings"
-	"time"
-
-	"github.com/go-git/go-git/v5"
-	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
 // CommitData represents information about a single commit.
@@ -20,43 +19,40 @@ type CommitData struct {
 // GetCommitHistory retrieves a list of commits that touch the repository,
 // optionally filtered by a since date.
 func GetCommitHistory(since string) ([]CommitData, error) {
-	repo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{DetectDotGit: true})
-	if err != nil {
-		return nil, fmt.Errorf("failed to open repo: %v", err)
-	}
-
-	head, err := repo.Head()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get head: %v", err)
-	}
-
-	opts := &git.LogOptions{From: head.Hash()}
-
+	args := []string{"log", "--format=%H|%aN|%aE|%at"}
 	if since != "" {
-		// Basic parsing for "since" if they provide a standard date format
-		if parsedTime, err := time.Parse("2006-01-02", since); err == nil {
-			opts.Since = &parsedTime
-		}
+		args = append(args, "--since="+since)
 	}
 
-	commitIter, err := repo.Log(opts)
-	if err != nil {
+	cmd := exec.Command("git", args...)
+	var stdout bytes.Buffer
+	cmd.Stdout = &stdout
+
+	if err := cmd.Run(); err != nil {
 		return nil, fmt.Errorf("git log failed: %v", err)
 	}
 
 	var commits []CommitData
-	err = commitIter.ForEach(func(c *object.Commit) error {
-		commits = append(commits, CommitData{
-			Hash:      c.Hash.String(),
-			Author:    c.Author.Name,
-			Email:     strings.ToLower(c.Author.Email),
-			Timestamp: c.Author.When.Unix(),
-		})
-		return nil
-	})
+	scanner := bufio.NewScanner(&stdout)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if line == "" {
+			continue
+		}
+		parts := strings.Split(line, "|")
+		if len(parts) != 4 {
+			continue
+		}
 
-	if err != nil {
-		return nil, fmt.Errorf("commit iteration failed: %v", err)
+		var ts int64
+		_, _ = fmt.Sscanf(parts[3], "%d", &ts)
+
+		commits = append(commits, CommitData{
+			Hash:      parts[0],
+			Author:    parts[1],
+			Email:     strings.ToLower(parts[2]),
+			Timestamp: ts,
+		})
 	}
 
 	return commits, nil
