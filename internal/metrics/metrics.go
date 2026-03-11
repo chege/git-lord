@@ -45,33 +45,6 @@ func CalculateHours(timestamps []int64, sessionWindowMinutes int) int {
 	return hours
 }
 
-// CalculateMaxGap finds the longest gap between commits in calendar days.
-func CalculateMaxGap(timestamps []int64) int {
-	if len(timestamps) < 2 {
-		return 0
-	}
-
-	// Clone and sort
-	ts := make([]int64, len(timestamps))
-	copy(ts, timestamps)
-	sort.SliceStable(ts, func(i, j int) bool {
-		return ts[i] < ts[j]
-	})
-
-	maxGapDays := 0
-	for i := 1; i < len(ts); i++ {
-		// Calculate gap in seconds
-		gapSecs := ts[i] - ts[i-1]
-		// Convert to full days
-		gapDays := int(gapSecs / 86400)
-		if gapDays > maxGapDays {
-			maxGapDays = gapDays
-		}
-	}
-
-	return maxGapDays
-}
-
 // CalculateMonths counts unique active months from commit timestamps.
 func CalculateMonths(timestamps []int64) int {
 	uniqueMonths := make(map[string]bool)
