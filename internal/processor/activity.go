@@ -11,7 +11,8 @@ import (
 func ProcessPulse(commits []gitcmd.CommitData, showProgress bool) []models.PulseStat {
 	authors := make(map[string]*models.PulseStat)
 
-	bar := newProgressBar(len(commits), "Analyzing commits", showProgress)
+	spinner := newSpinner("Analyzing commits", showProgress)
+	defer spinner.Stop()
 
 	for _, c := range commits {
 		id := c.Email
@@ -26,15 +27,6 @@ func ProcessPulse(commits []gitcmd.CommitData, showProgress bool) []models.Pulse
 		authors[id].Net += (c.Additions - c.Deletions)
 		authors[id].Churn += (c.Additions + c.Deletions)
 		authors[id].Files += c.Files
-
-		if bar != nil {
-			_ = bar.Add(1)
-		}
-	}
-
-	if bar != nil {
-		_ = bar.Finish()
-		_ = bar.Clear()
 	}
 
 	var stats []models.PulseStat

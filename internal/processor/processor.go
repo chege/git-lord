@@ -2,41 +2,68 @@ package processor
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/schollz/progressbar/v3"
-
 	"github.com/chege/git-lord/internal/gitcmd"
 	"github.com/chege/git-lord/internal/metrics"
 	"github.com/chege/git-lord/internal/models"
 )
 
+// Spinner provides a simple CLI loading animation.
+type Spinner struct {
+	message string
+	stop    chan struct{}
+	wg      sync.WaitGroup
+}
+
+func newSpinner(message string, show bool) *Spinner {
+	if !show {
+		return nil
+	}
+	s := &Spinner{
+		message: message,
+		stop:    make(chan struct{}),
+	}
+	s.wg.Add(1)
+	go s.run()
+	return s
+}
+
+func (s *Spinner) run() {
+	defer s.wg.Done()
+	chars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	i := 0
+	for {
+		select {
+		case <-s.stop:
+			fmt.Fprintf(os.Stderr, "\r\033[K") // Clear line
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "\r%s %s... ", chars[i], s.message)
+			i = (i + 1) % len(chars)
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+func (s *Spinner) Stop() {
+	if s == nil {
+		return
+	}
+	close(s.stop)
+	s.wg.Wait()
+}
+
 // ResultExtended holds extra data needed for specialized reports.
 type ResultExtended struct {
 	models.Result
 	FileOwners map[string]map[string]int // file -> email -> lines
-}
-
-func newProgressBar(count int, desc string, show bool) *progressbar.ProgressBar {
-	if !show {
-		return nil
-	}
-	return progressbar.NewOptions(count,
-		progressbar.OptionSetDescription(desc),
-		progressbar.OptionSetWidth(15),
-		progressbar.OptionShowCount(),
-		progressbar.OptionSetTheme(progressbar.Theme{
-			Saucer:        "=",
-			SaucerHead:    ">",
-			SaucerPadding: " ",
-			BarStart:      "[",
-			BarEnd:        "]",
-		}),
-	)
 }
 
 // ProcessRepository orchestrates the gathering and aggregation of metrics.
@@ -54,7 +81,8 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 	}
 	close(filesChan)
 
-	bar := newProgressBar(len(files), "Blaming files", showProgress)
+	spinner := newSpinner("Blaming files", showProgress)
+	defer spinner.Stop()
 
 	type fileBlame struct {
 		Path string
@@ -77,9 +105,6 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 					if err == nil {
 						resultsChan <- fileBlame{Path: file, Data: blameData}
 					}
-					if bar != nil {
-						_ = bar.Add(1)
-					}
 				}
 			}
 		}()
@@ -87,10 +112,6 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 
 	go func() {
 		wg.Wait()
-		if bar != nil {
-			_ = bar.Finish()
-			_ = bar.Clear()
-		}
 		close(resultsChan)
 	}()
 
