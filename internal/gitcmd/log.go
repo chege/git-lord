@@ -45,7 +45,7 @@ func GetCommitHistory(since string) ([]CommitData, error) {
 		}
 
 		var ts int64
-		fmt.Sscanf(parts[3], "%d", &ts)
+		_, _ = fmt.Sscanf(parts[3], "%d", &ts)
 
 		commits = append(commits, CommitData{
 			Hash:      parts[0],

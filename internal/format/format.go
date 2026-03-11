@@ -61,31 +61,31 @@ func PrintTable(stats []AuthorStat, global processor.GlobalMetrics, noHours bool
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 
 	if noHours {
-		fmt.Fprintln(w, "Author\tloc\tcoms\tfils\tdistribution")
+		_, _ = fmt.Fprintln(w, "Author\tloc\tcoms\tfils\tdistribution")
 	} else {
-		fmt.Fprintln(w, "Author\tloc\tcoms\tfils\thours\tmonths\tdistribution")
+		_, _ = fmt.Fprintln(w, "Author\tloc\tcoms\tfils\thours\tmonths\tdistribution")
 	}
 
 	for _, p := range stats {
 		dist := fmt.Sprintf("%.1f / %.1f / %.1f", p.LocDist, p.ComsDist, p.FilesDist)
 		if noHours {
-			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%s\n",
 				p.Name, p.Loc, p.Commits, p.Files, dist)
 		} else {
-			fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%s\n",
+			_, _ = fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%s\n",
 				p.Name, p.Loc, p.Commits, p.Files, p.Hours, p.Months, dist)
 		}
 	}
 
-	fmt.Fprintln(w, "---------------------------------------------------------------------------------")
+	_, _ = fmt.Fprintln(w, "---------------------------------------------------------------------------------")
 	if noHours {
-		fmt.Fprintf(w, "Total\t%d\t%d\t%d\t100.0 / 100.0 / 100.0\n",
+		_, _ = fmt.Fprintf(w, "Total\t%d\t%d\t%d\t100.0 / 100.0 / 100.0\n",
 			global.TotalLoc, global.TotalCommits, global.TotalFiles)
 	} else {
-		fmt.Fprintf(w, "Total\t%d\t%d\t%d\t%d\t%d\t100.0 / 100.0 / 100.0\n",
+		_, _ = fmt.Fprintf(w, "Total\t%d\t%d\t%d\t%d\t%d\t100.0 / 100.0 / 100.0\n",
 			global.TotalLoc, global.TotalCommits, global.TotalFiles, global.TotalHours, global.TotalMonths)
 	}
-	w.Flush()
+	_ = w.Flush()
 }
 
 // PrintJSON formats the stats to JSON.
