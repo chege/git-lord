@@ -1,20 +1,64 @@
 package processor
 
 import (
+	"context"
 	"fmt"
-	"math"
+	"os"
 	"runtime"
 	"sort"
 	"strings"
 	"sync"
 	"time"
 
-	"github.com/schollz/progressbar/v3"
-
 	"github.com/chege/git-lord/internal/gitcmd"
 	"github.com/chege/git-lord/internal/metrics"
 	"github.com/chege/git-lord/internal/models"
 )
+
+// Spinner provides a simple CLI loading animation.
+type Spinner struct {
+	message string
+	stop    chan struct{}
+	wg      sync.WaitGroup
+}
+
+func newSpinner(message string, show bool) *Spinner {
+	if !show {
+		return nil
+	}
+	s := &Spinner{
+		message: message,
+		stop:    make(chan struct{}),
+	}
+	s.wg.Add(1)
+	go s.run()
+	return s
+}
+
+func (s *Spinner) run() {
+	defer s.wg.Done()
+	chars := []string{"⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"}
+	i := 0
+	for {
+		select {
+		case <-s.stop:
+			fmt.Fprintf(os.Stderr, "\r\033[K") // Clear line
+			return
+		default:
+			fmt.Fprintf(os.Stderr, "\r%s %s... ", chars[i], s.message)
+			i = (i + 1) % len(chars)
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+}
+
+func (s *Spinner) Stop() {
+	if s == nil {
+		return
+	}
+	close(s.stop)
+	s.wg.Wait()
+}
 
 // ResultExtended holds extra data needed for specialized reports.
 type ResultExtended struct {
@@ -22,64 +66,12 @@ type ResultExtended struct {
 	FileOwners map[string]map[string]int // file -> email -> lines
 }
 
-// ProcessPulse calculates activity metrics from history without using blame.
-func ProcessPulse(commits []gitcmd.CommitData, showProgress bool) []models.PulseStat {
-	authors := make(map[string]*models.PulseStat)
-
-	var bar *progressbar.ProgressBar
-	if showProgress {
-		bar = progressbar.NewOptions(len(commits),
-			progressbar.OptionSetDescription("Analyzing commits"),
-			progressbar.OptionSetWidth(15),
-			progressbar.OptionShowCount(),
-			progressbar.OptionSetTheme(progressbar.Theme{
-				Saucer:        "=",
-				SaucerHead:    ">",
-				SaucerPadding: " ",
-				BarStart:      "[",
-				BarEnd:        "]",
-			}),
-		)
-	}
-
-	for _, c := range commits {
-		id := c.Email
-		if _, ok := authors[id]; !ok {
-			authors[id] = &models.PulseStat{
-				Name: c.Author,
-			}
-		}
-		authors[id].Commits++
-		authors[id].Additions += c.Additions
-		authors[id].Deletions += c.Deletions
-		authors[id].Net += (c.Additions - c.Deletions)
-		authors[id].Churn += (c.Additions + c.Deletions)
-		authors[id].Files += c.Files
-
-		if bar != nil {
-			_ = bar.Add(1)
-		}
-	}
-
-	if bar != nil {
-		_ = bar.Finish()
-		_ = bar.Clear()
-	}
-
-	var stats []models.PulseStat
-	for _, s := range authors {
-		stats = append(stats, *s)
-	}
-
-	sort.SliceStable(stats, func(i, j int) bool {
-		return stats[i].Commits > stats[j].Commits
-	})
-
-	return stats
-}
-
 // ProcessRepository orchestrates the gathering and aggregation of metrics.
-func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress bool, workerCount int) ResultExtended {
+func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.CommitData, showProgress bool, workerCount int) ResultExtended {
+	if len(commits) == 0 && len(files) == 0 {
+		return ResultExtended{}
+	}
+
 	if workerCount <= 0 {
 		workerCount = runtime.NumCPU() * 2
 	}
@@ -89,21 +81,8 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 	}
 	close(filesChan)
 
-	var bar *progressbar.ProgressBar
-	if showProgress {
-		bar = progressbar.NewOptions(len(files),
-			progressbar.OptionSetDescription("Blaming files"),
-			progressbar.OptionSetWidth(15),
-			progressbar.OptionShowCount(),
-			progressbar.OptionSetTheme(progressbar.Theme{
-				Saucer:        "=",
-				SaucerHead:    ">",
-				SaucerPadding: " ",
-				BarStart:      "[",
-				BarEnd:        "]",
-			}),
-		)
-	}
+	spinner := newSpinner("Blaming files", showProgress)
+	defer spinner.Stop()
 
 	type fileBlame struct {
 		Path string
@@ -118,12 +97,14 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 		go func() {
 			defer wg.Done()
 			for file := range filesChan {
-				blameData, err := gitcmd.GetBlame(file)
-				if err == nil {
-					resultsChan <- fileBlame{Path: file, Data: blameData}
-				}
-				if bar != nil {
-					_ = bar.Add(1)
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					blameData, err := gitcmd.GetBlame(ctx, file)
+					if err == nil {
+						resultsChan <- fileBlame{Path: file, Data: blameData}
+					}
 				}
 			}
 		}()
@@ -131,10 +112,6 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 
 	go func() {
 		wg.Wait()
-		if bar != nil {
-			_ = bar.Finish()
-			_ = bar.Clear()
-		}
 		close(resultsChan)
 	}()
 
@@ -151,8 +128,8 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 			authors[id] = &models.AuthorMetrics{
 				Name:           commit.Author,
 				Email:          commit.Email,
-				FirstCommit:    commit.Timestamp,
-				LastCommit:     commit.Timestamp,
+				FirstCommit:    commit.Date.Unix(),
+				LastCommit:     commit.Date.Unix(),
 				ActiveDays:     make(map[string]bool),
 				FileExtensions: make(map[string]bool),
 			}
@@ -161,19 +138,18 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 		m.Commits++
 		m.LifetimeAdditions += commit.Additions
 		m.LifetimeDeletions += commit.Deletions
-		if commit.Timestamp < m.FirstCommit {
-			m.FirstCommit = commit.Timestamp
+		if commit.Date.Unix() < m.FirstCommit {
+			m.FirstCommit = commit.Date.Unix()
 		}
-		if commit.Timestamp > m.LastCommit {
-			m.LastCommit = commit.Timestamp
+		if commit.Date.Unix() > m.LastCommit {
+			m.LastCommit = commit.Date.Unix()
 		}
 
 		m.MessageWords += len(strings.Fields(commit.Message))
-		day := time.Unix(commit.Timestamp, 0).Format("2006-01-02")
+		day := commit.Date.Format("2006-01-02")
 		m.ActiveDays[day] = true
 
-		t := time.Unix(commit.Timestamp, 0)
-		if t.Weekday() == time.Friday && t.Hour() >= 16 {
+		if commit.Date.Weekday() == time.Friday && commit.Date.Hour() >= 16 {
 			m.FridayAfterFour++
 		}
 
@@ -187,11 +163,10 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 		}
 
 		global.TotalCommits++
-		authorTimestamps[id] = append(authorTimestamps[id], commit.Timestamp)
-		allTimestamps = append(allTimestamps, commit.Timestamp)
+		authorTimestamps[id] = append(authorTimestamps[id], commit.Date.Unix())
+		allTimestamps = append(allTimestamps, commit.Date.Unix())
 	}
 
-	// Merge blame results
 	for res := range resultsChan {
 		path := res.Path
 		blame := res.Data
@@ -267,109 +242,8 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData, showProgress
 	}
 }
 
-// ProcessSilos finds high-risk knowledge silos.
-func ProcessSilos(res ResultExtended, minLOC int) []models.SiloRecord {
-	var silos []models.SiloRecord
-
-	for path, owners := range res.FileOwners {
-		total := 0
-		var maxOwner string
-		maxLoc := 0
-		for email, loc := range owners {
-			total += loc
-			if loc > maxLoc {
-				maxLoc = loc
-				maxOwner = email
-			}
-		}
-
-		if total < minLOC { 
-			continue
-		}
-
-		ownership := (float64(maxLoc) / float64(total)) * 100.0
-		if ownership >= 80.0 { 
-			silos = append(silos, models.SiloRecord{
-				Path:      path,
-				LOC:       total,
-				Owner:     maxOwner,
-				Ownership: ownership,
-			})
-		}
-	}
-
-	sort.Slice(silos, func(i, j int) bool {
-		return silos[i].LOC > silos[j].LOC 
-	})
-
-	if len(silos) > 15 {
-		silos = silos[:15]
-	}
-
-	return silos
-}
-
-// ProcessTrends groups additions and deletions by month.
-func ProcessTrends(commits []gitcmd.CommitData) []models.TrendStat {
-	monthMap := make(map[string]*models.TrendStat)
-
-	for _, c := range commits {
-		period := time.Unix(c.Timestamp, 0).Format("2006-01")
-		if _, ok := monthMap[period]; !ok {
-			monthMap[period] = &models.TrendStat{Period: period}
-		}
-		monthMap[period].Additions += c.Additions
-		monthMap[period].Deletions += c.Deletions
-		monthMap[period].Net += (c.Additions - c.Deletions)
-	}
-
-	var trends []models.TrendStat
-	for _, t := range monthMap {
-		trends = append(trends, *t)
-	}
-
-	sort.Slice(trends, func(i, j int) bool {
-		return trends[i].Period < trends[j].Period
-	})
-
-	return trends
-}
-
-func ProcessLegacy(res models.Result) []models.LegacyStat {
-	yearMap := make(map[int]int)
-	total := 0
-
-	for _, a := range res.Authors {
-		if a.OldestLineTs == 0 {
-			continue
-		}
-		year := time.Unix(a.OldestLineTs, 0).Year()
-		yearMap[year] += a.Loc
-		total += a.Loc
-	}
-
-	var stats []models.LegacyStat
-	for year, loc := range yearMap {
-		pct := 0.0
-		if total > 0 {
-			pct = float64(loc) / float64(total) * 100
-		}
-		stats = append(stats, models.LegacyStat{
-			Year: year,
-			Loc:  loc,
-			Pct:  pct,
-		})
-	}
-
-	sort.Slice(stats, func(i, j int) bool {
-		return stats[i].Year < stats[j].Year
-	})
-
-	return stats
-}
-
 func calculateBusFactor(authors map[string]*models.AuthorMetrics, totalLoc int) int {
-	if totalLoc == 0 {
+	if totalLoc <= 0 || len(authors) == 0 {
 		return 0
 	}
 
@@ -391,223 +265,4 @@ func calculateBusFactor(authors map[string]*models.AuthorMetrics, totalLoc int) 
 		}
 	}
 	return count
-}
-
-func ProcessAwards(res models.Result) []models.Award {
-	var awards []models.Award
-	authors := res.Authors
-
-	// 1. THE JANITOR
-	var janitor *models.AuthorMetrics
-	minNet := 0
-	for _, a := range authors {
-		net := a.LifetimeAdditions - a.LifetimeDeletions
-		if a.LifetimeDeletions > 50 && net < minNet {
-			minNet = net
-			janitor = a
-		}
-	}
-	if janitor != nil {
-		awards = append(awards, models.Award{
-			ID:          "janitor",
-			Title:       "The Janitor",
-			Emoji:       "🧹",
-			Winner:      janitor.Name,
-			Vibe:        "The refactoring hero cleaning up the kingdom.",
-			Description: "Awarded to the person who has removed the most technical debt (Deletions > Additions).",
-			Value:       fmt.Sprintf("%d Net Lines", minNet),
-		})
-	}
-
-	// 2. THE INDIANA JONES
-	var jones *models.AuthorMetrics
-	oldest := int64(math.MaxInt64)
-	for _, a := range authors {
-		if a.OldestLineTs > 0 && a.OldestLineTs < oldest {
-			oldest = a.OldestLineTs
-			jones = a
-		}
-	}
-	if jones != nil {
-		awards = append(awards, models.Award{
-			ID:          "indiana",
-			Title:       "The Indiana Jones",
-			Emoji:       "🤠",
-			Winner:      jones.Name,
-			Vibe:        "Brave enough to explore the ancient ruins.",
-			Description: "Awarded to the author of the single oldest surviving line of code in the HEAD.",
-			Value:       fmt.Sprintf("Code from %s", time.Unix(oldest, 0).Format("2006-01-02")),
-		})
-	}
-
-	// 3. THE NOVELIST
-	var novelist *models.AuthorMetrics
-	maxWords := 0
-	for _, a := range authors {
-		if a.Commits >= 5 {
-			avg := a.MessageWords / a.Commits
-			if avg > maxWords {
-				maxWords = avg
-				novelist = a
-			}
-		}
-	}
-	if novelist != nil {
-		awards = append(awards, models.Award{
-			ID:          "novelist",
-			Title:       "The Novelist",
-			Emoji:       "📚",
-			Winner:      novelist.Name,
-			Vibe:        "Their git logs are available in hardcover.",
-			Description: "Awarded for the highest average word count in commit messages.",
-			Value:       fmt.Sprintf("%d words/commit", maxWords),
-		})
-	}
-
-	// 4. THE SPEED DEMON
-	var speedDemon *models.AuthorMetrics
-	minInterval := float64(math.MaxInt64)
-	for _, a := range authors {
-		if len(a.CommitIntervals) >= 5 {
-			var sum int64
-			for _, v := range a.CommitIntervals {
-				sum += v
-			}
-			avg := float64(sum) / float64(len(a.CommitIntervals))
-			if avg < minInterval {
-				minInterval = avg
-				speedDemon = a
-			}
-		}
-	}
-	if speedDemon != nil {
-		awards = append(awards, models.Award{
-			ID:          "speed",
-			Title:       "The Speed Demon",
-			Emoji:       "🏎️",
-			Winner:      speedDemon.Name,
-			Vibe:        "Currently in a state of hyper-focus flow.",
-			Description: "Awarded for the shortest average time between consecutive commits.",
-			Value:       fmt.Sprintf("%.1f min avg", minInterval/60.0),
-		})
-	}
-
-	// 5. THE POLISHED GEM
-	var gem *models.AuthorMetrics
-	maxRatio := 0.0
-	for _, a := range authors {
-		if a.Loc > 100 { // Only for significant code owners
-			ratio := float64(a.Commits) / float64(a.Loc)
-			if ratio > maxRatio {
-				maxRatio = ratio
-				gem = a
-			}
-		}
-	}
-	if gem != nil {
-		awards = append(awards, models.Award{
-			ID:          "gem",
-			Title:       "The Polished Gem",
-			Emoji:       "💎",
-			Winner:      gem.Name,
-			Vibe:        "For the developer who makes tiny, perfect commits.",
-			Description: "Awarded for the highest ratio of commits to surviving lines of code.",
-			Value:       fmt.Sprintf("%.2f coms/loc", maxRatio),
-		})
-	}
-
-	// 6. THE GHOST OF CHRISTMAS PAST
-	var ghost *models.AuthorMetrics
-	maxGhostLoc := 0
-	ninetyDaysAgo := time.Now().AddDate(0, 0, -90).Unix()
-	for _, a := range authors {
-		if a.LastCommit < ninetyDaysAgo {
-			if a.Loc > maxGhostLoc {
-				maxGhostLoc = a.Loc
-				ghost = a
-			}
-		}
-	}
-	if ghost != nil {
-		awards = append(awards, models.Award{
-			ID:          "ghost",
-			Title:       "The Ghost of Christmas Past",
-			Emoji:       "👻",
-			Winner:      ghost.Name,
-			Vibe:        "Their spirit still haunts every file.",
-			Description: "Identifies the largest knowledge silo from a contributor who hasn't been active in 90 days.",
-			Value:       fmt.Sprintf("%d surviving LOC", maxGhostLoc),
-		})
-	}
-
-	// 7. THE FRIDAY ROULETTE
-	var gambler *models.AuthorMetrics
-	maxFriday := 0
-	for _, a := range authors {
-		if a.FridayAfterFour > maxFriday {
-			maxFriday = a.FridayAfterFour
-			gambler = a
-		}
-	}
-	if gambler != nil {
-		awards = append(awards, models.Award{
-			ID:          "friday",
-			Title:       "The Friday Roulette",
-			Emoji:       "🎲",
-			Winner:      gambler.Name,
-			Vibe:        "Living life on the edge of a broken production build.",
-			Description: "Awarded for the most pushes made after 4:00 PM on a Friday.",
-			Value:       fmt.Sprintf("%d late Friday pushes", maxFriday),
-		})
-	}
-
-	// 8. THE DEEP THINKER
-	var thinker *models.AuthorMetrics
-	maxGap := 0
-	for _, a := range authors {
-		if a.MaxGap > maxGap && a.MaxGap > 7 {
-			maxGap = a.MaxGap
-			thinker = a
-		}
-	}
-	if thinker != nil {
-		awards = append(awards, models.Award{
-			ID:          "thinker",
-			Title:       "The Deep Thinker",
-			Emoji:       "🧘",
-			Winner:      thinker.Name,
-			Vibe:        "Currently in a state of high-level strategic meditation.",
-			Description: "Awarded for the longest streak of consecutive days with zero activity.",
-			Value:       fmt.Sprintf("%d day gap", maxGap),
-		})
-	}
-
-	// 9. THE STEALTH SPECIALIST
-	var stealth *models.AuthorMetrics
-	minVelocity := 100.0
-	for _, a := range authors {
-		activeDays := len(a.ActiveDays)
-		if activeDays > 10 { // Threshold: Must be a long-term contributor
-			velocity := float64(a.LifetimeAdditions+a.LifetimeDeletions) / float64(activeDays)
-			if velocity < 1.5 {
-				if velocity < minVelocity {
-					minVelocity = velocity
-					stealth = a
-				}
-			}
-		}
-	}
-	if stealth != nil {
-		awards = append(awards, models.Award{
-			ID:          "stealth",
-			Title:       "The Stealth Specialist",
-			Emoji:       "🥷",
-			Winner:      stealth.Name,
-			Vibe:        "Operating in the shadows with surgical precision.",
-			Description: "Awarded for having many active days but making very small, targeted changes.",
-			Value:       fmt.Sprintf("%.1f changes/day", minVelocity),
-		})
-	}
-
-	return awards
 }

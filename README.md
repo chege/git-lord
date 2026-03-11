@@ -1,41 +1,44 @@
 # git-lord 👑
 
-`git-lord` is a high-performance Git contributor intelligence suite. It analyzes ownership silos, code retention, and activity velocity with gamified behavioral awards.
+[![Go Report Card](https://goreportcard.com/badge/github.com/chege/git-lord)](https://goreportcard.com/report/github.com/chege/git-lord)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Designed for speed, `git-lord` utilizes parallel native Git processing to deliver instant insights even on large repositories.
+**High-performance Git contributor intelligence suite.** 
 
-## 🚀 Key Features
+`git-lord` analyzes ownership silos, code retention, and team momentum. It replaces standard counters with deep behavioral insights and a gamified award ceremony.
 
-### 🏆 The Leaderboard (Default)
-The classic ownership view, refined.
-- **LOC & Distribution**: Who owns the most surviving code.
-- **Retention %**: How much of an author's lifetime work still exists.
-- **Exclusivity**: Identify knowledge silos (files owned 100% by one person).
-- **Bus Factor**: The ultimate repository health metric.
-- **Max Gap**: Identify the most consistent (and the ghosting) contributors.
+---
+
+## ⚡️ Fast. Precise. Actionable.
+
+Most Git stats tools get slow as your repo grows. `git-lord` is built in Go and utilizes parallel native processing to deliver results in milliseconds, not minutes.
+
+## 🚀 Subcommands
+
+### 🏆 Ownership Leaderboard (`git lord`)
+The "King of the Hill" view. See who owns the code, who is retaining it, and where the knowledge silos are.
+- **Progressive Disclosure:** Use `--silos`, `--social`, or `--all` to reveal deeper metrics.
+- **Bus Factor:** See at a glance how many people need to "get hit by a bus" before your repo is in trouble.
 
 ### ⚡ Activity Pulse (`git lord pulse`)
-Instant activity metrics without the heavy blame pass.
-- **Velocity**: Commits, additions, and deletions in the last N days.
-- **Net Impact**: See who is cleaning up technical debt (negative net lines).
-- **Churn**: Total volume of code change.
+What's happening *right now*? 
+- **Velocity:** Analyze the last 7, 30, or 90 days.
+- **Net Impact:** Highlight the "Code Janitors" who are deleting more than they add.
 
-### 🧛 Vampire Stats (`git lord night-owl`)
-Understand the team's working rhythm with emoji distributions.
-- **Time Windows**: Morning ☀️, Afternoon 🌤️, Evening 🌙, and Night 🧛.
-- **Flow State**: Shortest average time between commits.
+### 🎖️ The Award Ceremony (`git lord awards`)
+Behavioral analysis turned into a game. 
+- **🧹 The Janitor:** Highest refactor impact.
+- **🤠 Indiana Jones:** Owner of the oldest surviving code.
+- **📚 The Novelist:** Most descriptive commit logs.
+- **🏎️ Speed Demon:** Shortest average time between commits.
 
-### 🎖️ The Awards Ceremony (`git lord awards`)
-Unlock behavioral trophies based on Git history.
-- **🧹 The Janitor**: Most technical debt removed.
-- **🤠 Indiana Jones**: Author of the oldest surviving line of code.
-- **📚 The Novelist**: Most descriptive commit messages.
-- **🎲 Friday Roulette**: Most pushes after 4 PM on a Friday.
-- **🧘 Deep Thinker**: Longest streak of strategic meditation (inactivity).
+### 🏛️ Archaeology (`git lord legacy` & `silos`)
+- **Legacy:** Breakdown your surviving lines by the year they were written.
+- **Silos:** A "Risk Map" identifying large files owned by only one person.
+
+---
 
 ## 📦 Installation
-
-### Quick Install (One-liner)
 
 Install the latest version directly to your `$GOBIN`:
 
@@ -43,45 +46,34 @@ Install the latest version directly to your `$GOBIN`:
 go install github.com/chege/git-lord/cmd/git-lord@latest
 ```
 
-_(Make sure your `$(go env GOPATH)/bin` is in your system `$PATH`)_
+---
 
 ## 🛠 Usage
 
 ```bash
-# Standard leaderboard
+# Basic leaderboard (git-fame style)
 git lord
 
-# See all columns (Tenure, Retention, Badges, etc.)
-git lord --all
+# High-risk file analysis
+git lord silos --min-loc 100
 
-# Check the last 7 days of activity
-git lord pulse --days 7
+# Recent team momentum
+git lord pulse --days 14
 
-# Who are the night owls?
-git lord night-owl
-
-# Hold the awards ceremony
+# The trophy cabinet
 git lord awards
 ```
 
-### Global Options
+### Global Flags
 
-| Flag         | Default | Description                                                            |
-| :----------- | :------ | :--------------------------------------------------------------------- |
-| `--all`      | `false` | Reveal all available metrics and columns.                              |
-| `--silos`    | `false` | Show Exclusivity, Retention, and Bus Factor.                           |
-| `--social`   | `false` | Show Hours, Max Gap, and Badges.                                       |
-| `--sort`     | `loc`   | Sort by metric: `loc`, `coms`, `fils`, `hrs`.                          |
-| `--since`    | `""`    | Filter history by date (e.g., `"2023-01-01"`, `"2 weeks ago"`).        |
-| `--include`  | `""`    | Only include files matching glob pattern (e.g., `"*.go"`).             |
-| `--format`   | `table` | Render format: `table`, `json`, `csv`.                                 |
-
-## 🧪 Development
-
-```bash
-make test   # Run full E2E and unit suite (caching disabled)
-make lint   # Run golangci-lint
-```
+| Flag | Default | Description |
+| :--- | :--- | :--- |
+| `--all` | `false` | Show every single metric and column. |
+| `--sort` | `loc` | Sort by: `loc`, `coms`, `fils`, `hrs`. |
+| `--format` | `table` | Output: `table`, `json`, `csv`. |
+| `--since` | `""` | Filter by date (e.g. "2023-01-01"). |
+| `--no-progress` | `false` | Hide the ASCII spinner. |
 
 ---
-Rule your repository with `git-lord`.
+
+Developed with ❤️ for the Git community. Rule your repository.

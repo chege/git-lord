@@ -15,6 +15,23 @@ import (
 	"github.com/chege/git-lord/internal/models"
 )
 
+// PrintReportHeader displays a styled summary of the analysis context.
+func PrintReportHeader(name string, since string, files int, commits int) {
+	window := "All-time"
+	if since != "" {
+		window = since
+	}
+
+	fmt.Printf("%s\n", text.Colors{text.FgHiCyan, text.Bold}.Sprint("👑 GIT-LORD | "+strings.ToUpper(name)))
+	fmt.Printf("%s %s\n", text.Colors{text.FgHiBlack}.Sprint("📅 Window:  "), window)
+
+	counts := fmt.Sprintf("%d commits", commits)
+	if files > 0 {
+		counts += fmt.Sprintf(" across %d files", files)
+	}
+	fmt.Printf("%s %s\n\n", text.Colors{text.FgHiBlack}.Sprint("📦 Analyzed:"), counts)
+}
+
 type column struct {
 	Header    string
 	ValueFunc func(p models.AuthorStat) string
@@ -94,6 +111,16 @@ func getColumns(global models.GlobalMetrics, cfg models.Config) []column {
 	return cols
 }
 
+func newTableWriter(headerColor text.Color) table.Writer {
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+	t.SetStyle(table.StyleRounded)
+	t.Style().Options.SeparateRows = false
+	t.Style().Format.Header = text.FormatUpper
+	t.Style().Color.Header = text.Colors{headerColor, text.Bold}
+	return t
+}
+
 // GenerateStats converts models.Result into a sorted slice of AuthorStat.
 func GenerateStats(result models.Result, cfg models.Config) []models.AuthorStat {
 	var stats []models.AuthorStat
@@ -117,7 +144,7 @@ func GenerateStats(result models.Result, cfg models.Config) []models.AuthorStat 
 		}
 
 		// Award "Code Janitor" badge 🧹
-		if stat.LifetimeDeletions > 50 && stat.LifetimeDeletions > stat.LifetimeAdditions {
+		if stat.LifetimeDeletions > models.JanitorDeletionThreshold && stat.LifetimeDeletions > stat.LifetimeAdditions {
 			stat.Badges = append(stat.Badges, "🧹")
 		}
 
@@ -144,12 +171,7 @@ func GenerateStats(result models.Result, cfg models.Config) []models.AuthorStat 
 
 // PrintTable formats the stats like git-fame.
 func PrintTable(stats []models.AuthorStat, global models.GlobalMetrics, cfg models.Config) {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(table.StyleRounded)
-	t.Style().Options.SeparateRows = false
-	t.Style().Format.Header = text.FormatUpper
-	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
+	t := newTableWriter(text.FgCyan)
 	t.Style().Color.IndexColumn = text.Colors{text.FgHiCyan}
 
 	cols := getColumns(global, cfg)
@@ -181,12 +203,7 @@ func PrintTable(stats []models.AuthorStat, global models.GlobalMetrics, cfg mode
 
 // PrintPulse formats the recent activity stats.
 func PrintPulse(stats []models.PulseStat) {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(table.StyleRounded)
-	t.Style().Options.SeparateRows = false
-	t.Style().Format.Header = text.FormatUpper
-	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
+	t := newTableWriter(text.FgCyan)
 
 	cols := getPulseColumns()
 	headerRow := make(table.Row, len(cols))
@@ -213,12 +230,7 @@ func PrintSilos(silos []models.SiloRecord) {
 		return
 	}
 
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(table.StyleRounded)
-	t.Style().Options.SeparateRows = false
-	t.Style().Format.Header = text.FormatUpper
-	t.Style().Color.Header = text.Colors{text.FgRed, text.Bold}
+	t := newTableWriter(text.FgRed)
 
 	t.AppendHeader(table.Row{"Risk Level", "File Path", "LOC", "Primary Owner", "Ownership"})
 
@@ -241,12 +253,7 @@ func PrintSilos(silos []models.SiloRecord) {
 
 // PrintTrends formats the repository growth trends.
 func PrintTrends(trends []models.TrendStat) {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(table.StyleRounded)
-	t.Style().Options.SeparateRows = false
-	t.Style().Format.Header = text.FormatUpper
-	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
+	t := newTableWriter(text.FgCyan)
 
 	t.AppendHeader(table.Row{"Month", "Additions", "Deletions", "Net Change"})
 
@@ -268,12 +275,7 @@ func PrintTrends(trends []models.TrendStat) {
 
 // PrintLegacy formats the code age report.
 func PrintLegacy(stats []models.LegacyStat) {
-	t := table.NewWriter()
-	t.SetOutputMirror(os.Stdout)
-	t.SetStyle(table.StyleRounded)
-	t.Style().Options.SeparateRows = false
-	t.Style().Format.Header = text.FormatUpper
-	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
+	t := newTableWriter(text.FgCyan)
 
 	t.AppendHeader(table.Row{"Year", "LOC", "Share (%)"})
 

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -11,6 +12,8 @@ import (
 	"github.com/chege/git-lord/internal/models"
 	"github.com/chege/git-lord/internal/processor"
 )
+
+const version = "v0.1.0"
 
 func main() {
 	cfg := models.Config{}
@@ -66,9 +69,15 @@ func main() {
 		awardFs.PrintDefaults()
 	}
 
+	ctx := context.Background()
+
 	if len(os.Args) < 2 {
 		_ = rootFs.Parse(os.Args[1:])
-		handleError(runLeaderboard(cfg))
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
+		handleError(runLeaderboard(ctx, cfg))
 		return
 	}
 
@@ -76,30 +85,56 @@ func main() {
 	switch cmd {
 	case "pulse":
 		_ = pulseFs.Parse(os.Args[2:])
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
 		if cfg.Since == "" {
 			cfg.Since = fmt.Sprintf("%d days ago", cfg.Days)
 		}
-		handleError(runPulse(cfg))
+		handleError(runPulse(ctx, cfg))
 	case "awards":
 		_ = awardFs.Parse(os.Args[2:])
-		handleError(runAwards(cfg))
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
+		handleError(runAwards(ctx, cfg))
 	case "legacy":
 		_ = legacyFs.Parse(os.Args[2:])
-		handleError(runLegacy(cfg))
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
+		handleError(runLegacy(ctx, cfg))
 	case "silos":
 		_ = siloFs.Parse(os.Args[2:])
-		handleError(runSilos(cfg))
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
+		handleError(runSilos(ctx, cfg))
 	case "trends":
 		_ = trendFs.Parse(os.Args[2:])
-		handleError(runTrends(cfg))
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
+		handleError(runTrends(ctx, cfg))
 	case "help":
 		rootFs.Usage()
 	case "-h", "--help":
 		rootFs.Usage()
+	case "-v", "--version":
+		fmt.Printf("git-lord %s\n", version)
 	default:
 		if cmd[0] == '-' {
 			_ = rootFs.Parse(os.Args[1:])
-			handleError(runLeaderboard(cfg))
+			if cfg.Version {
+				fmt.Printf("git-lord %s\n", version)
+				return
+			}
+			handleError(runLeaderboard(ctx, cfg))
 		} else {
 			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
 			rootFs.Usage()
@@ -117,6 +152,7 @@ func setupGlobalFlags(fs *flag.FlagSet, cfg *models.Config) {
 	fs.BoolVar(&cfg.NoHours, "no-hours", false, "Disable hours calculation")
 	fs.BoolVar(&cfg.NoProgress, "no-progress", false, "Disable progress bar")
 	fs.IntVar(&cfg.Days, "days", 30, "Window in days for the 'pulse' command")
+	fs.BoolVar(&cfg.Version, "version", false, "Show version information")
 }
 
 func handleError(err error) {
@@ -126,22 +162,34 @@ func handleError(err error) {
 	}
 }
 
-func runLeaderboard(cfg models.Config) error {
-	if err := gitcmd.IsValidRepo(); err != nil {
-		return err
+func gatherData(ctx context.Context, cfg models.Config, needFiles bool) ([]string, []gitcmd.CommitData, error) {
+	if err := gitcmd.IsValidRepo(ctx); err != nil {
+		return nil, nil, err
 	}
 
-	files, err := gitcmd.ListTrackedFiles()
+	var filteredFiles []string
+	if needFiles {
+		files, err := gitcmd.ListTrackedFiles(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+
+		filteredFiles, err = filterFiles(files, cfg.Include, cfg.Exclude)
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+
+	commits, err := gitcmd.GetCommitHistory(ctx, cfg.Since)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 
-	filteredFiles, err := filterFiles(files, cfg.Include, cfg.Exclude)
-	if err != nil {
-		return err
-	}
+	return filteredFiles, commits, nil
+}
 
-	commits, err := gitcmd.GetCommitHistory(cfg.Since)
+func runLeaderboard(ctx context.Context, cfg models.Config) error {
+	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
 	}
@@ -151,7 +199,11 @@ func runLeaderboard(cfg models.Config) error {
 		showProgress = false
 	}
 
-	result := processor.ProcessRepository(filteredFiles, commits, showProgress, 0)
+	if cfg.Format == "table" {
+		format.PrintReportHeader("Ownership Leaderboard", cfg.Since, len(filteredFiles), len(commits))
+	}
+
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0)
 	stats := format.GenerateStats(result.Result, cfg)
 
 	switch cfg.Format {
@@ -165,12 +217,8 @@ func runLeaderboard(cfg models.Config) error {
 	return nil
 }
 
-func runPulse(cfg models.Config) error {
-	if err := gitcmd.IsValidRepo(); err != nil {
-		return err
-	}
-
-	commits, err := gitcmd.GetCommitHistory(cfg.Since)
+func runPulse(ctx context.Context, cfg models.Config) error {
+	_, commits, err := gatherData(ctx, cfg, false)
 	if err != nil {
 		return err
 	}
@@ -178,6 +226,10 @@ func runPulse(cfg models.Config) error {
 	showProgress := !cfg.NoProgress
 	if cfg.Format == "json" || cfg.Format == "csv" {
 		showProgress = false
+	}
+
+	if cfg.Format == "table" {
+		format.PrintReportHeader("Activity Pulse", cfg.Since, 0, len(commits))
 	}
 
 	stats := processor.ProcessPulse(commits, showProgress)
@@ -193,66 +245,46 @@ func runPulse(cfg models.Config) error {
 	return nil
 }
 
-func runLegacy(cfg models.Config) error {
-	if err := gitcmd.IsValidRepo(); err != nil {
-		return err
-	}
-
-	files, err := gitcmd.ListTrackedFiles()
+func runLegacy(ctx context.Context, cfg models.Config) error {
+	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
 	}
 
-	filteredFiles, err := filterFiles(files, cfg.Include, cfg.Exclude)
-	if err != nil {
-		return err
+	if cfg.Format == "table" {
+		format.PrintReportHeader("Legacy Report", cfg.Since, len(filteredFiles), len(commits))
 	}
 
-	commits, err := gitcmd.GetCommitHistory(cfg.Since)
-	if err != nil {
-		return err
-	}
-
-	result := processor.ProcessRepository(filteredFiles, commits, !cfg.NoProgress, 0)
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, !cfg.NoProgress, 0)
 	stats := processor.ProcessLegacy(result.Result)
 	format.PrintLegacy(stats)
 	return nil
 }
 
-func runSilos(cfg models.Config) error {
-	if err := gitcmd.IsValidRepo(); err != nil {
-		return err
-	}
-
-	files, err := gitcmd.ListTrackedFiles()
+func runSilos(ctx context.Context, cfg models.Config) error {
+	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
 	}
 
-	filteredFiles, err := filterFiles(files, cfg.Include, cfg.Exclude)
-	if err != nil {
-		return err
+	if cfg.Format == "table" {
+		format.PrintReportHeader("Knowledge Silos", cfg.Since, len(filteredFiles), len(commits))
 	}
 
-	commits, err := gitcmd.GetCommitHistory(cfg.Since)
-	if err != nil {
-		return err
-	}
-
-	result := processor.ProcessRepository(filteredFiles, commits, !cfg.NoProgress, 0)
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, !cfg.NoProgress, 0)
 	silos := processor.ProcessSilos(result, cfg.MinLOC)
 	format.PrintSilos(silos)
 	return nil
 }
 
-func runTrends(cfg models.Config) error {
-	if err := gitcmd.IsValidRepo(); err != nil {
+func runTrends(ctx context.Context, cfg models.Config) error {
+	_, commits, err := gatherData(ctx, cfg, false)
+	if err != nil {
 		return err
 	}
 
-	commits, err := gitcmd.GetCommitHistory(cfg.Since)
-	if err != nil {
-		return err
+	if cfg.Format == "table" {
+		format.PrintReportHeader("Repository Trends", cfg.Since, 0, len(commits))
 	}
 
 	trends := processor.ProcessTrends(commits)
@@ -260,22 +292,8 @@ func runTrends(cfg models.Config) error {
 	return nil
 }
 
-func runAwards(cfg models.Config) error {
-	if err := gitcmd.IsValidRepo(); err != nil {
-		return err
-	}
-
-	files, err := gitcmd.ListTrackedFiles()
-	if err != nil {
-		return err
-	}
-
-	filteredFiles, err := filterFiles(files, cfg.Include, cfg.Exclude)
-	if err != nil {
-		return err
-	}
-
-	commits, err := gitcmd.GetCommitHistory(cfg.Since)
+func runAwards(ctx context.Context, cfg models.Config) error {
+	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
 	}
@@ -285,8 +303,12 @@ func runAwards(cfg models.Config) error {
 		showProgress = false
 	}
 
-	result := processor.ProcessRepository(filteredFiles, commits, showProgress, 0)
-	awards := processor.ProcessAwards(result.Result)
+	if cfg.Format == "table" {
+		format.PrintReportHeader("Awards Ceremony", cfg.Since, len(filteredFiles), len(commits))
+	}
+
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0)
+	awards := processor.ProcessAwards(result.Result, showProgress)
 
 	switch cfg.Format {
 	case "json":

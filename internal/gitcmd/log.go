@@ -3,9 +3,11 @@ package gitcmd
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // CommitData represents information about a single commit.
@@ -13,7 +15,7 @@ type CommitData struct {
 	Hash      string
 	Author    string
 	Email     string
-	Timestamp int64
+	Date      time.Time
 	Additions int
 	Deletions int
 	Files     int
@@ -23,21 +25,19 @@ type CommitData struct {
 
 // GetCommitHistory retrieves a list of commits that touch the repository,
 // optionally filtered by a since date.
-func GetCommitHistory(since string) ([]CommitData, error) {
-	// Use --numstat to get additions/deletions per file
-	// %P gives parent hashes (more than 1 means merge)
-	// %s gives subject
-	args := []string{"log", "--format=COMMIT|%H|%aN|%aE|%at|%P|%s", "--numstat"}
+func GetCommitHistory(ctx context.Context, since string) ([]CommitData, error) {
+	// %ai gives ISO author date: 2023-01-01 12:00:00 +0100
+	args := []string{"log", "--format=COMMIT|%H|%aN|%aE|%ai|%P|%s", "--numstat"}
 	if since != "" {
 		args = append(args, "--since="+since)
 	}
 
-	cmd := exec.Command("git", args...)
+	cmd := exec.CommandContext(ctx, "git", args...)
 	var stdout bytes.Buffer
 	cmd.Stdout = &stdout
 
 	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git log failed: %v", err)
+		return nil, fmt.Errorf("git log failed: %w", err)
 	}
 
 	var commits []CommitData
@@ -59,8 +59,12 @@ func GetCommitHistory(since string) ([]CommitData, error) {
 				continue
 			}
 
-			var ts int64
-			_, _ = fmt.Sscanf(parts[4], "%d", &ts)
+			// Parse ISO date
+			t, err := time.Parse("2006-01-02 15:04:05 -0700", parts[4])
+			if err != nil {
+				// Fallback to now if parsing fails
+				t = time.Now()
+			}
 
 			parents := ""
 			msg := ""
@@ -72,19 +76,18 @@ func GetCommitHistory(since string) ([]CommitData, error) {
 			}
 
 			currentCommit = &CommitData{
-				Hash:      parts[1],
-				Author:    parts[2],
-				Email:     strings.ToLower(parts[3]),
-				Timestamp: ts,
-				IsMerge:   strings.Contains(parents, " "),
-				Message:   msg,
+				Hash:    parts[1],
+				Author:  parts[2],
+				Email:   strings.ToLower(parts[3]),
+				Date:    t,
+				IsMerge: strings.Contains(parents, " "),
+				Message: msg,
 			}
 		} else if currentCommit != nil {
-			// Parse numstat lines: "added deleted path"
 			parts := strings.Fields(line)
 			if len(parts) >= 3 {
 				var added, deleted int
-				if parts[0] != "-" { // Handle binary files
+				if parts[0] != "-" {
 					_, _ = fmt.Sscanf(parts[0], "%d", &added)
 				}
 				if parts[1] != "-" {
