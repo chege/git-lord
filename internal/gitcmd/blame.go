@@ -25,7 +25,9 @@ func GetBlame(ctx context.Context, filePath string) (BlameData, error) {
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	cmd := exec.CommandContext(ctx, "git", "blame", "--line-porcelain", filePath)
+	// -M: Detect renames within the commit
+	// -C: Detect lines moved or copied from other files in the same commit
+	cmd := exec.CommandContext(ctx, "git", "blame", "-M", "-C", "--line-porcelain", filePath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

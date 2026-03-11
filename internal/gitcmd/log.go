@@ -27,7 +27,8 @@ type CommitData struct {
 // optionally filtered by a since date.
 func GetCommitHistory(ctx context.Context, since string) ([]CommitData, error) {
 	// %ai gives ISO author date: 2023-01-01 12:00:00 +0100
-	args := []string{"log", "--format=COMMIT|%H|%aN|%aE|%ai|%P|%s", "--numstat"}
+	// -M detects renames
+	args := []string{"log", "-M", "--format=COMMIT|%H|%aN|%aE|%ai|%P|%s", "--numstat"}
 	if since != "" {
 		args = append(args, "--since="+since)
 	}
