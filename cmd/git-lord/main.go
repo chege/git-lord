@@ -24,6 +24,7 @@ func main() {
 	rootFs.BoolVar(&cfg.ShowAll, "all", false, "Show all columns")
 	rootFs.BoolVar(&cfg.ShowSilos, "silos", false, "Show exclusivity and silo columns")
 	rootFs.BoolVar(&cfg.ShowSocial, "social", false, "Show badges and behavioral columns")
+	rootFs.BoolVar(&cfg.Version, "version", false, "Show version information")
 
 	// Subcommands
 	pulseFs := flag.NewFlagSet("pulse", flag.ExitOnError)
@@ -85,41 +86,21 @@ func main() {
 	switch cmd {
 	case "pulse":
 		_ = pulseFs.Parse(os.Args[2:])
-		if cfg.Version {
-			fmt.Printf("git-lord %s\n", version)
-			return
-		}
 		if cfg.Since == "" {
 			cfg.Since = fmt.Sprintf("%d days ago", cfg.Days)
 		}
 		handleError(runPulse(ctx, cfg))
 	case "awards":
 		_ = awardFs.Parse(os.Args[2:])
-		if cfg.Version {
-			fmt.Printf("git-lord %s\n", version)
-			return
-		}
 		handleError(runAwards(ctx, cfg))
 	case "legacy":
 		_ = legacyFs.Parse(os.Args[2:])
-		if cfg.Version {
-			fmt.Printf("git-lord %s\n", version)
-			return
-		}
 		handleError(runLegacy(ctx, cfg))
 	case "silos":
 		_ = siloFs.Parse(os.Args[2:])
-		if cfg.Version {
-			fmt.Printf("git-lord %s\n", version)
-			return
-		}
 		handleError(runSilos(ctx, cfg))
 	case "trends":
 		_ = trendFs.Parse(os.Args[2:])
-		if cfg.Version {
-			fmt.Printf("git-lord %s\n", version)
-			return
-		}
 		handleError(runTrends(ctx, cfg))
 	case "help":
 		rootFs.Usage()
@@ -152,7 +133,6 @@ func setupGlobalFlags(fs *flag.FlagSet, cfg *models.Config) {
 	fs.BoolVar(&cfg.NoHours, "no-hours", false, "Disable hours calculation")
 	fs.BoolVar(&cfg.NoProgress, "no-progress", false, "Disable progress bar")
 	fs.IntVar(&cfg.Days, "days", 30, "Window in days for the 'pulse' command")
-	fs.BoolVar(&cfg.Version, "version", false, "Show version information")
 }
 
 func handleError(err error) {
