@@ -12,8 +12,6 @@ import (
 	"github.com/chege/git-lord/internal/processor"
 )
 
-const version = "v0.1.0"
-
 func main() {
 	cfg := models.Config{}
 
@@ -23,7 +21,6 @@ func main() {
 	rootFs.BoolVar(&cfg.ShowAll, "all", false, "Show all columns")
 	rootFs.BoolVar(&cfg.ShowSilos, "silos", false, "Show exclusivity and silo columns")
 	rootFs.BoolVar(&cfg.ShowSocial, "social", false, "Show badges and behavioral columns")
-	rootFs.BoolVar(&cfg.Version, "version", false, "Show version information")
 
 	// Subcommands
 	pulseFs := flag.NewFlagSet("pulse", flag.ExitOnError)
@@ -71,10 +68,6 @@ func main() {
 
 	if len(os.Args) < 2 {
 		_ = rootFs.Parse(os.Args[1:])
-		if cfg.Version {
-			fmt.Printf("git-lord %s\n", version)
-			return
-		}
 		handleError(runLeaderboard(cfg))
 		return
 	}
@@ -103,15 +96,9 @@ func main() {
 		rootFs.Usage()
 	case "-h", "--help":
 		rootFs.Usage()
-	case "-v", "--version":
-		fmt.Printf("git-lord %s\n", version)
 	default:
 		if cmd[0] == '-' {
 			_ = rootFs.Parse(os.Args[1:])
-			if cfg.Version {
-				fmt.Printf("git-lord %s\n", version)
-				return
-			}
 			handleError(runLeaderboard(cfg))
 		} else {
 			fmt.Fprintf(os.Stderr, "Unknown command: %s\n\n", cmd)
@@ -164,10 +151,6 @@ func runLeaderboard(cfg models.Config) error {
 		showProgress = false
 	}
 
-	if cfg.Format == "table" {
-		format.PrintReportHeader("Ownership Leaderboard", cfg.Since, len(filteredFiles), len(commits))
-	}
-
 	result := processor.ProcessRepository(filteredFiles, commits, showProgress, 0)
 	stats := format.GenerateStats(result.Result, cfg)
 
@@ -195,10 +178,6 @@ func runPulse(cfg models.Config) error {
 	showProgress := !cfg.NoProgress
 	if cfg.Format == "json" || cfg.Format == "csv" {
 		showProgress = false
-	}
-
-	if cfg.Format == "table" {
-		format.PrintReportHeader("Activity Pulse", cfg.Since, 0, len(commits))
 	}
 
 	stats := processor.ProcessPulse(commits, showProgress)
@@ -234,10 +213,6 @@ func runLegacy(cfg models.Config) error {
 		return err
 	}
 
-	if cfg.Format == "table" {
-		format.PrintReportHeader("Legacy Report", cfg.Since, len(filteredFiles), len(commits))
-	}
-
 	result := processor.ProcessRepository(filteredFiles, commits, !cfg.NoProgress, 0)
 	stats := processor.ProcessLegacy(result.Result)
 	format.PrintLegacy(stats)
@@ -264,10 +239,6 @@ func runSilos(cfg models.Config) error {
 		return err
 	}
 
-	if cfg.Format == "table" {
-		format.PrintReportHeader("Knowledge Silos", cfg.Since, len(filteredFiles), len(commits))
-	}
-
 	result := processor.ProcessRepository(filteredFiles, commits, !cfg.NoProgress, 0)
 	silos := processor.ProcessSilos(result, cfg.MinLOC)
 	format.PrintSilos(silos)
@@ -282,10 +253,6 @@ func runTrends(cfg models.Config) error {
 	commits, err := gitcmd.GetCommitHistory(cfg.Since)
 	if err != nil {
 		return err
-	}
-
-	if cfg.Format == "table" {
-		format.PrintReportHeader("Repository Trends", cfg.Since, 0, len(commits))
 	}
 
 	trends := processor.ProcessTrends(commits)
@@ -316,10 +283,6 @@ func runAwards(cfg models.Config) error {
 	showProgress := !cfg.NoProgress
 	if cfg.Format == "json" || cfg.Format == "csv" {
 		showProgress = false
-	}
-
-	if cfg.Format == "table" {
-		format.PrintReportHeader("Awards Ceremony", cfg.Since, len(filteredFiles), len(commits))
 	}
 
 	result := processor.ProcessRepository(filteredFiles, commits, showProgress, 0)

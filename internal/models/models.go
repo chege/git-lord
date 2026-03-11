@@ -16,7 +16,6 @@ type Config struct {
 	ShowSilos  bool
 	ShowSocial bool
 	MinLOC     int
-	Version    bool
 }
 
 // AuthorMetrics holds all statistics for a single author.

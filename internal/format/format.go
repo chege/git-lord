@@ -15,23 +15,6 @@ import (
 	"github.com/chege/git-lord/internal/models"
 )
 
-// PrintReportHeader displays a styled summary of the analysis context.
-func PrintReportHeader(name string, since string, files int, commits int) {
-	window := "All-time"
-	if since != "" {
-		window = since
-	}
-
-	fmt.Printf("%s\n", text.Colors{text.FgHiCyan, text.Bold}.Sprint("👑 GIT-LORD | "+strings.ToUpper(name)))
-	fmt.Printf("%s %s\n", text.Colors{text.FgHiBlack}.Sprint("📅 Window:  "), window)
-
-	counts := fmt.Sprintf("%d commits", commits)
-	if files > 0 {
-		counts += fmt.Sprintf(" across %d files", files)
-	}
-	fmt.Printf("%s %s\n\n", text.Colors{text.FgHiBlack}.Sprint("📦 Analyzed:"), counts)
-}
-
 type column struct {
 	Header    string
 	ValueFunc func(p models.AuthorStat) string
