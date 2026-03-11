@@ -6,7 +6,9 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"text/tabwriter"
+
+	"github.com/jedib0t/go-pretty/v6/table"
+	"github.com/jedib0t/go-pretty/v6/text"
 
 	"github.com/christopher/git-lord/internal/processor"
 )
@@ -58,34 +60,41 @@ func GenerateStats(result processor.Result, sortBy string) []AuthorStat {
 
 // PrintTable formats the stats like git-fame.
 func PrintTable(stats []AuthorStat, global processor.GlobalMetrics, noHours bool) {
-	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
+	t := table.NewWriter()
+	t.SetOutputMirror(os.Stdout)
+
+	// Create a beautifully styled modern table
+	t.SetStyle(table.StyleRounded)
+	t.Style().Options.SeparateRows = false
+	t.Style().Format.Header = text.FormatUpper
+	t.Style().Color.Header = text.Colors{text.FgCyan, text.Bold}
+	t.Style().Color.IndexColumn = text.Colors{text.FgHiCyan}
 
 	if noHours {
-		_, _ = fmt.Fprintln(w, "Author\tloc\tcoms\tfils\tdistribution")
+		t.AppendHeader(table.Row{"Author", "LOC", "Commits", "Files", "Distribution"})
 	} else {
-		_, _ = fmt.Fprintln(w, "Author\tloc\tcoms\tfils\thours\tmonths\tdistribution")
+		t.AppendHeader(table.Row{"Author", "LOC", "Commits", "Files", "Hours", "Months", "Distribution"})
 	}
 
 	for _, p := range stats {
 		dist := fmt.Sprintf("%.1f / %.1f / %.1f", p.LocDist, p.ComsDist, p.FilesDist)
 		if noHours {
-			_, _ = fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%s\n",
-				p.Name, p.Loc, p.Commits, p.Files, dist)
+			t.AppendRow(table.Row{p.Name, p.Loc, p.Commits, p.Files, dist})
 		} else {
-			_, _ = fmt.Fprintf(w, "%s\t%d\t%d\t%d\t%d\t%d\t%s\n",
-				p.Name, p.Loc, p.Commits, p.Files, p.Hours, p.Months, dist)
+			t.AppendRow(table.Row{p.Name, p.Loc, p.Commits, p.Files, p.Hours, p.Months, dist})
 		}
 	}
 
-	_, _ = fmt.Fprintln(w, "---------------------------------------------------------------------------------")
+	t.AppendSeparator()
+
+	totalDist := "100.0 / 100.0 / 100.0"
 	if noHours {
-		_, _ = fmt.Fprintf(w, "Total\t%d\t%d\t%d\t100.0 / 100.0 / 100.0\n",
-			global.TotalLoc, global.TotalCommits, global.TotalFiles)
+		t.AppendFooter(table.Row{"Total", global.TotalLoc, global.TotalCommits, global.TotalFiles, totalDist})
 	} else {
-		_, _ = fmt.Fprintf(w, "Total\t%d\t%d\t%d\t%d\t%d\t100.0 / 100.0 / 100.0\n",
-			global.TotalLoc, global.TotalCommits, global.TotalFiles, global.TotalHours, global.TotalMonths)
+		t.AppendFooter(table.Row{"Total", global.TotalLoc, global.TotalCommits, global.TotalFiles, global.TotalHours, global.TotalMonths, totalDist})
 	}
-	_ = w.Flush()
+
+	t.Render()
 }
 
 // PrintJSON formats the stats to JSON.

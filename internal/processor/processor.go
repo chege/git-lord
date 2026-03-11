@@ -8,9 +8,9 @@ import (
 	"github.com/christopher/git-lord/internal/metrics"
 )
 
-// AuthorMetrics holds all statistics for a single author.
 type AuthorMetrics struct {
 	Name    string
+	Email   string
 	Loc     int
 	Commits int
 	Files   int
@@ -66,41 +66,51 @@ func ProcessRepository(files []string, commits []gitcmd.CommitData) Result {
 	authors := make(map[string]*AuthorMetrics)
 	var global GlobalMetrics
 
+	// Merge commits and prepare timestamps for hours/months
+	// We do this first to populate the Names for the Emails
+	authorTimestamps := make(map[string][]int64)
+	var allTimestamps []int64
+
+	for _, commit := range commits {
+		// Use Email as the unique identifier
+		id := commit.Email
+		if _, ok := authors[id]; !ok {
+			authors[id] = &AuthorMetrics{
+				Name:  commit.Author,
+				Email: commit.Email,
+			}
+		}
+		authors[id].Commits++
+		global.TotalCommits++
+		authorTimestamps[id] = append(authorTimestamps[id], commit.Timestamp)
+		allTimestamps = append(allTimestamps, commit.Timestamp)
+	}
+
 	// Merge blame results
 	for result := range resultsChan {
 		if len(result.AuthorLines) > 0 {
 			global.TotalFiles++
 		}
-		for author, lines := range result.AuthorLines {
-			if _, ok := authors[author]; !ok {
-				authors[author] = &AuthorMetrics{Name: author}
+		for email, lines := range result.AuthorLines {
+			id := email
+			if _, ok := authors[id]; !ok {
+				// Fallback if we have lines but no commits
+				authors[id] = &AuthorMetrics{
+					Name:  email,
+					Email: email,
+				}
 			}
-			authors[author].Loc += lines
-			authors[author].Files++
+			authors[id].Loc += lines
+			authors[id].Files++
 			global.TotalLoc += lines
 		}
 	}
 
-	// Merge commits and prepare timestamps for hours/months
-	authorTimestamps := make(map[string][]int64)
-	var allTimestamps []int64
-
-	for _, commit := range commits {
-		if _, ok := authors[commit.Author]; !ok {
-			// Some authors might have commits but 0 surviving LOC.
-			authors[commit.Author] = &AuthorMetrics{Name: commit.Author}
-		}
-		authors[commit.Author].Commits++
-		global.TotalCommits++
-		authorTimestamps[commit.Author] = append(authorTimestamps[commit.Author], commit.Timestamp)
-		allTimestamps = append(allTimestamps, commit.Timestamp)
-	}
-
-	for author, timestamps := range authorTimestamps {
+	for id, timestamps := range authorTimestamps {
 		hours := metrics.CalculateHours(timestamps, 60)
 		months := metrics.CalculateMonths(timestamps)
-		authors[author].Hours = hours
-		authors[author].Months = months
+		authors[id].Hours = hours
+		authors[id].Months = months
 		global.TotalHours += hours
 	}
 

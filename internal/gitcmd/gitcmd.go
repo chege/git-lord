@@ -1,16 +1,15 @@
 package gitcmd
 
 import (
-	"bytes"
 	"fmt"
-	"os/exec"
-	"strings"
+
+	"github.com/go-git/go-git/v5"
 )
 
 // IsValidRepo checks if the current directory is within a Git repository.
 func IsValidRepo() error {
-	cmd := exec.Command("git", "rev-parse", "--is-inside-work-tree")
-	if err := cmd.Run(); err != nil {
+	_, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
 		return fmt.Errorf("not a git repository: %v", err)
 	}
 	return nil
@@ -18,19 +17,20 @@ func IsValidRepo() error {
 
 // ListTrackedFiles returns a list of files currently tracked by Git.
 func ListTrackedFiles() ([]string, error) {
-	cmd := exec.Command("git", "ls-files")
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	if err := cmd.Run(); err != nil {
-		return nil, fmt.Errorf("git ls-files failed: %v", err)
+	repo, err := git.PlainOpenWithOptions(".", &git.PlainOpenOptions{DetectDotGit: true})
+	if err != nil {
+		return nil, fmt.Errorf("failed to open repo: %v", err)
 	}
 
-	lines := strings.Split(stdout.String(), "\n")
-	var files []string
-	for _, line := range lines {
-		if line != "" {
-			files = append(files, line)
-		}
+	idx, err := repo.Storer.Index()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get git index: %v", err)
 	}
+
+	var files []string
+	for _, entry := range idx.Entries {
+		files = append(files, entry.Name)
+	}
+
 	return files, nil
 }
