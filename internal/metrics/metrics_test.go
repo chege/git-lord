@@ -108,3 +108,57 @@ func TestCalculateMonths(t *testing.T) {
 		})
 	}
 }
+
+func TestCalculateMaxGap(t *testing.T) {
+	tests := []struct {
+		name        string
+		timestamps  []int64
+		expectedGap int
+	}{
+		{
+			name:        "Empty",
+			timestamps:  []int64{},
+			expectedGap: 0,
+		},
+		{
+			name:        "Single",
+			timestamps:  []int64{100000},
+			expectedGap: 0,
+		},
+		{
+			name: "Two commits same day",
+			timestamps: []int64{
+				100000,
+				100000 + 3600,
+			},
+			expectedGap: 0,
+		},
+		{
+			name: "Two commits 2 days apart",
+			timestamps: []int64{
+				100000,
+				100000 + (2 * 86400),
+			},
+			expectedGap: 2,
+		},
+		{
+			name: "Multiple commits with gaps",
+			timestamps: []int64{
+				100000,
+				100000 + 86400,      // 1 day gap
+				100000 + (5 * 86400), // 4 day gap from prev
+				100000 + (6 * 86400), // 1 day gap from prev
+			},
+			expectedGap: 4,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CalculateMaxGap(tt.timestamps)
+			if got != tt.expectedGap {
+				t.Errorf("CalculateMaxGap() = %v, want %v", got, tt.expectedGap)
+			}
+		})
+	}
+}

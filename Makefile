@@ -7,7 +7,7 @@ build:
 	go build -o $(BUILD_DIR)/$(BINARY_NAME) ./cmd/git-lord
 
 test:
-	go test -v ./...
+	go test -count=1 -v ./...
 
 lint:
 	golangci-lint run
