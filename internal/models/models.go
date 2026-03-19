@@ -4,8 +4,8 @@ import "github.com/chege/git-lord/internal/gitcmd"
 
 // Award Thresholds
 const (
-	JanitorDeletionThreshold = 50
-	NovelistCommitThreshold  = 5
+	JanitorDeletionThreshold  = 50
+	NovelistCommitThreshold   = 5
 	StealthActiveDayThreshold = 10
 )
 
@@ -43,24 +43,24 @@ type AuthorMetrics struct {
 	LifetimeDeletions int
 
 	// Award specific metrics
-	MessageWords      int
-	ActiveDays        map[string]bool
-	FridayAfterFour   int
-	OldestLineTs      int64
-	LintCommits       int
-	MergeCommits      int
-	FileExtensions    map[string]bool
-	CommitIntervals   []int64
+	MessageWords    int
+	ActiveDays      map[string]bool
+	FridayAfterFour int
+	OldestLineTs    int64
+	LintCommits     int
+	MergeCommits    int
+	FileExtensions  map[string]bool
+	CommitIntervals []int64
 }
 
 // GlobalMetrics holds the sum of all metrics.
 type GlobalMetrics struct {
-	TotalLoc       int
-	TotalCommits   int
-	TotalFiles     int
-	TotalHours     int
-	TotalMonths    int
-	BusFactor      int
+	TotalLoc     int
+	TotalCommits int
+	TotalFiles   int
+	TotalHours   int
+	TotalMonths  int
+	BusFactor    int
 }
 
 // Result holds the final processed data.
@@ -122,6 +122,29 @@ type TrendStat struct {
 	Additions int
 	Deletions int
 	Net       int
+}
+
+// HotspotRecord captures the ranked hotspot metrics for one file.
+type HotspotRecord struct {
+	Path           string  `json:"path"`
+	Score          int     `json:"score"`
+	Risk           string  `json:"risk"`
+	LOC            int     `json:"loc"`
+	RecentChurn    int     `json:"recent_churn"`
+	RecentCommits  int     `json:"recent_commits"`
+	PrimaryOwner   string  `json:"primary_owner"`
+	OwnerLines     int     `json:"owner_lines"`
+	OwnershipPct   float64 `json:"ownership_pct"`
+	ActiveOwners   int     `json:"active_owners"`
+	ChurnScore     int     `json:"churn_score"`
+	OwnershipScore int     `json:"ownership_score"`
+	SizeScore      int     `json:"size_score"`
+}
+
+// HotspotReport is the processor output for ranked hotspot analysis.
+type HotspotReport struct {
+	WindowDays int             `json:"window_days"`
+	Hotspots   []HotspotRecord `json:"hotspots"`
 }
 
 // CommitData is an alias to avoid circular dependencies if needed,
