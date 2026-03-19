@@ -24,6 +24,7 @@ The "King of the Hill" view. See who owns the code, who is retaining it, and whe
 What's happening *right now*? 
 - **Velocity:** Analyze the last 7, 30, or 90 days.
 - **Net Impact:** Highlight the "Code Janitors" who are deleting more than they add.
+- **Code Churn:** Surface who is rewriting, cleaning up, or touching the most code in a given window.
 
 ### 🎖️ The Award Ceremony (`git lord awards`)
 Behavioral analysis turned into a game. 
@@ -60,9 +61,45 @@ git lord silos --min-loc 100
 # Recent team momentum
 git lord pulse --days 14
 
+# Export a churn window for scripts or spreadsheets
+git lord pulse --days 30 --format csv
+
 # The trophy cabinet
 git lord awards
 ```
+
+### Churn-focused pulse workflows
+
+Use `git lord pulse` when you want a fast read on recent code churn instead of long-term ownership. The pulse report exposes `commits`, `additions`, `deletions`, `net`, `churn`, and `files`, so it is a good fit for refactors, cleanup pushes, and migration windows.
+
+```bash
+# Catch intense cleanup or rewrite bursts from the last week
+git lord pulse --days 7
+
+# Review monthly churn to spot sustained refactors and janitorial work
+git lord pulse --days 30
+
+# Find broad file-touching work during a release cycle
+git lord pulse --days 90
+
+# Combine with a precise date when investigating a migration window
+git lord pulse --since 2026-02-01
+
+# Rank contributors by raw churn using JSON output
+git lord pulse --days 30 --format json | jq 'sort_by(-.churn)[] | {author, churn, net, commits, files}'
+
+# Find the most net-negative cleanup work in the same window
+git lord pulse --days 30 --format json | jq 'sort_by(.net)[] | {author, net, deletions, additions}'
+
+# Sort a CSV export by churn in a spreadsheet or shell pipeline
+git lord pulse --days 30 --format csv
+```
+
+- `--days 7` is useful for incident response, hotfixes, and short refactor spikes.
+- `--days 30` works well for sprint or monthly review.
+- `--days 90` helps surface larger migrations that fan out across many files.
+- `--format json` is the easiest way to build churn-first rankings by `churn`, `net`, or `files` in shell tooling.
+- `--format csv` is useful when you want to sort and compare windows in a spreadsheet.
 
 ### Global Flags
 
