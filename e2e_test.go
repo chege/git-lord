@@ -37,8 +37,7 @@ func setupTestRepo(t *testing.T) string {
 		cmd.Env = testEnv(env...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
-			t.Fatalf("git %v failed: %v
-Output: %s", args, err, out)
+			t.Fatalf("git %v failed: %v\nOutput: %s", args, err, out)
 		}
 	}
 
@@ -48,15 +47,11 @@ Output: %s", args, err, out)
 
 	// Commit 1 by Alice (Older)
 	file1 := filepath.Join(dir, "file1.txt")
-	if err := os.WriteFile(file1, []byte("line1
-line2
-line3
-"), 0644); err != nil {
+	if err := os.WriteFile(file1, []byte("line1\nline2\nline3\n"), 0644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
 	fileAlice := filepath.Join(dir, "alice.txt")
-	if err := os.WriteFile(fileAlice, []byte("alice legacy
-"), 0644); err != nil {
+	if err := os.WriteFile(fileAlice, []byte("alice legacy\n"), 0644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
 	runGit(nil, "add", ".")
@@ -76,17 +71,11 @@ line3
 
 	// Commit 2 by Bob (Newer)
 	// Bob overwrites Alice's line 3 to trigger a deletion
-	if err := os.WriteFile(file1, []byte("line1
-line2
-line3 from bob
-line4 from bob
-"), 0644); err != nil {
+	if err := os.WriteFile(file1, []byte("line1\nline2\nline3 from bob\nline4 from bob\n"), 0644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
 	file2 := filepath.Join(dir, "file2.txt")
-	if err := os.WriteFile(file2, []byte("bob line1
-bob line2
-"), 0644); err != nil {
+	if err := os.WriteFile(file2, []byte("bob line1\nbob line2\n"), 0644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
 	runGit(nil, "add", ".")
@@ -110,8 +99,7 @@ func buildGitLord(t *testing.T) string {
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("failed to build git-lord: %v
-Output: %s", err, string(out))
+		t.Fatalf("failed to build git-lord: %v\nOutput: %s", err, string(out))
 	}
 	return tempBin
 }
@@ -133,8 +121,7 @@ func TestE2E_BasicMetrics(t *testing.T) {
 
 	err := cmd.Run()
 	if err != nil {
-		t.Fatalf("git-lord execution failed: %v
-Stderr: %s", err, stderr.String())
+		t.Fatalf("git-lord execution failed: %v\nStderr: %s", err, stderr.String())
 	}
 
 	output := stdout.String()
@@ -184,8 +171,7 @@ func TestE2E_Pulse(t *testing.T) {
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("git-lord pulse failed: %v
-Output: %s", err, string(out))
+		t.Fatalf("git-lord pulse failed: %v\nOutput: %s", err, string(out))
 	}
 
 	output := string(out)
@@ -210,8 +196,7 @@ func TestE2E_PulseSortByChurn(t *testing.T) {
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("git-lord pulse --sort churn failed: %v
-Output: %s", err, string(out))
+		t.Fatalf("git-lord pulse --sort churn failed: %v\nOutput: %s", err, string(out))
 	}
 
 	reader := csv.NewReader(strings.NewReader(string(out)))
@@ -246,8 +231,7 @@ func TestE2E_PulseTableTotals(t *testing.T) {
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("git-lord pulse failed: %v
-Output: %s", err, string(out))
+		t.Fatalf("git-lord pulse failed: %v\nOutput: %s", err, string(out))
 	}
 
 	output := string(out)
@@ -272,8 +256,7 @@ func TestE2E_Awards(t *testing.T) {
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("git-lord awards failed: %v
-Output: %s", err, string(out))
+		t.Fatalf("git-lord awards failed: %v\nOutput: %s", err, string(out))
 	}
 
 	output := string(out)
@@ -297,8 +280,7 @@ func TestE2E_Silos(t *testing.T) {
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("git-lord silos failed: %v
-Output: %s", err, string(out))
+		t.Fatalf("git-lord silos failed: %v\nOutput: %s", err, string(out))
 	}
 
 	output := string(out)
@@ -319,8 +301,7 @@ func TestE2E_Trends(t *testing.T) {
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("git-lord trends failed: %v
-Output: %s", err, string(out))
+		t.Fatalf("git-lord trends failed: %v\nOutput: %s", err, string(out))
 	}
 
 	output := string(out)
@@ -342,15 +323,13 @@ func TestE2E_JSONOutput(t *testing.T) {
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		t.Fatalf("git-lord JSON failed: %v
-Output: %s", err, string(out))
+		t.Fatalf("git-lord JSON failed: %v\nOutput: %s", err, string(out))
 	}
 
 	output := string(out)
 	// Alice(3) + Bob(4) = 7
 	if !strings.Contains(output, `"TotalLoc": 7`) {
-		t.Errorf("Expected TotalLoc: 7 in JSON, got:
-%s", output)
+		t.Errorf("Expected TotalLoc: 7 in JSON, got:\n%s", output)
 	}
 	if !strings.Contains(output, `"Name": "Alice"`) {
 		t.Errorf("Expected Alice in JSON")
