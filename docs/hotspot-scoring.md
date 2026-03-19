@@ -5,82 +5,119 @@ processor, formatter, CLI, and tests all target the same behavior.
 
 ## Goal
 
-The hotspot report should rank files by near-term change risk, not by a single
-raw metric. A file becomes risky when it changes often, is large enough to hurt
-when it breaks, and is concentrated in too few hands.
+Rank files that are risky because they change often, are large enough to matter,
+and have understanding concentrated in too few hands.
 
-## Inputs
+The model should bias toward recent churn so the report surfaces active risk,
+not just historically concentrated ownership.
 
-Each candidate file combines three signals:
+## Data Sources
 
-- `recent_churn`: additions plus deletions touching the file inside the chosen
-  reporting window.
-- `loc`: current blamed lines of code for the file.
-- `ownership_pct`: share of the file owned by the primary owner,
-  `primary_owner_loc / loc`, expressed as `0.0` to `1.0`.
+- Current file size and ownership reuse blame-derived `FileOwners` data from
+  repository processing.
+- Recent churn aggregates per-file additions, deletions, and touch count from
+  `git log --numstat` over a recent window.
+- Tracked files only; ignore deleted files and files with no current tracked
+  path.
+- Rename-aware history should use `git log -M` so renamed files keep their
+  recent churn.
+- Ignore binary-file `numstat` rows with `-` values.
 
-Supporting fields:
+## Default Analysis Window
 
-- `primary_owner`: email or identity already used by blame-backed reports.
-- `owner_count`: number of authors with blamed lines in the file.
+- Default recent window: 30 days.
+- The CLI can make the window configurable later, but the processor should use
+  30 days when no explicit window is provided.
 
-## Eligibility
+## Eligibility Gate
 
-Ignore files that are too small or inactive to be meaningful hotspots:
+Only score files that meet all of the following:
 
-- exclude files with fewer than `20` LOC
-- exclude files with `0` recent churn in the selected window
+- current `loc >= 50`
+- `recent_churn > 0` in the analysis window
+- file still exists in the tracked file set
 
-This keeps tiny utility files and dormant files out of the ranking.
+This keeps the report focused on meaningful, currently-lived code.
 
-## Normalization
+## Ownership Terms
 
-Normalize each candidate against the largest value in the eligible set:
+For each eligible file:
 
-- `churn_score = recent_churn / max_recent_churn`
-- `size_score = loc / max_loc`
-- `concentration_score = clamp((ownership_pct - 0.50) / 0.50, 0, 1)`
+- `primary_owner`: author or email with the most current blamed lines
+- `owner_lines`: current blamed lines for the primary owner
+- `ownership_pct`: `owner_lines / loc * 100`
+- `active_owners`: count of authors with at least one current blamed line in the file
 
-Notes:
+Ownership concentration is driven primarily by `ownership_pct`. `active_owners`
+is retained as supporting context and for tie-breaking and display.
 
-- `concentration_score` stays `0` until a file is more than 50% owned by one
-  person.
-- a fully concentrated file scores `1.0`
-- if the candidate set is empty, the report is empty
+## Component Scores
 
-## Composite Score
+All component scores are normalized to `0..100`. Round the final hotspot score
+to the nearest whole number.
 
-Compute the final score as:
+### 1. Churn Score (50% weight)
 
-```text
-hotspot_score = churn_score*0.50 + concentration_score*0.35 + size_score*0.15
-```
+Churn dominates the ranking because the report is about active risk.
 
-Weighting rationale:
+Inputs:
 
-- churn is the strongest predictor of immediate coordination risk
-- ownership concentration is the main risk multiplier
-- size increases blast radius, but should not dominate the ranking
+- `recent_churn = additions + deletions` over the recent window
+- `recent_commits =` number of commits that touched the file in the recent window
 
-Keep this formula stable unless a later bead explicitly changes it.
+Subscores:
 
-## Risk Bands
+- `churn_volume_score = min(100, recent_churn / 200 * 100)`
+- `touch_frequency_score = min(100, recent_commits / 8 * 100)`
 
-Ownership concentration bands:
+Combine:
 
-- `ownership_pct >= 0.90`: `critical`
-- `ownership_pct >= 0.75`: `high`
-- `ownership_pct >= 0.60`: `elevated`
-- otherwise: `normal`
+- `churn_score = round(0.7 * churn_volume_score + 0.3 * touch_frequency_score)`
 
-Hotspot score bands:
+Interpretation:
 
-- `hotspot_score >= 0.75`: `critical`
-- `hotspot_score >= 0.50`: `high`
-- `hotspot_score >= 0.30`: `medium`
-- below `0.30`: omit from the default ranked output
+- about 200 changed lines in-window is enough to max the volume portion
+- about 8 touches in-window is enough to max the frequency portion
 
-## Ranking
+### 2. Ownership Score (30% weight)
+
+Ownership risk stays low until one person clearly dominates the file.
+
+Formula:
+
+- if `ownership_pct <= 50`, `ownership_score = 0`
+- else `ownership_score = min(100, (ownership_pct - 50) / 45 * 100)`
+
+Effects:
+
+- 50% ownership => 0 concentration risk
+- 80% ownership => about 67 ownership score
+- 95%+ ownership => 100 ownership score
+
+This aligns with the repo's existing silo semantics, where 80% is already high
+and 95% is critical.
+
+### 3. Size Score (20% weight)
+
+Size matters, but should not outrank churn.
+
+Formula:
+
+- `size_score = min(100, loc / 800 * 100)`
+
+Effects:
+
+- 50 LOC => 6.25 size score
+- 400 LOC => 50 size score
+- 800+ LOC => 100 size score
+
+## Final Hotspot Score
+
+`hotspot_score = round(0.5 * churn_score + 0.3 * ownership_score + 0.2 * size_score)`
+
+This keeps the score on a familiar 0-100 scale and makes weighting explicit.
+
+## Ranking Rules
 
 Sort descending by:
 
@@ -90,34 +127,54 @@ Sort descending by:
 4. `loc`
 5. `path` ascending for deterministic output
 
-Default output should keep the top `15` hotspots after filtering.
+## Risk Bands
 
-## Output Fields
+Map final score to severity labels:
 
-The processor should emit, at minimum:
+- `CRITICAL` => `score >= 80`
+- `HIGH` => `score >= 65`
+- `MEDIUM` => `score >= 50`
+- `WATCH` => `score >= 35`
+- below 35 => omit from the human-facing table report
+
+## Output Contract
+
+The processor should return enough data for table, JSON, CSV, and tests without
+recomputing.
+
+Required fields per hotspot row:
 
 - `path`
 - `score`
-- `risk_level`
-- `churn`
+- `risk`
 - `loc`
+- `recent_churn`
+- `recent_commits`
 - `primary_owner`
+- `owner_lines`
 - `ownership_pct`
-- `owner_count`
-- `churn_pct`
-- `size_pct`
-- `concentration_pct`
+- `active_owners`
+- `churn_score`
+- `ownership_score`
+- `size_score`
 
-The normalized percentages make formatter output and test fixtures easier to
-explain and debug.
+## Report Shape
 
-## Implementation Notes
+- Human-facing table should show the top 15 rows after filtering out scores
+  below `WATCH`.
+- JSON and CSV should expose the same raw and computed fields so tests and
+  downstream tooling can validate exact scoring.
 
-- recent churn needs per-file aggregation from the commit log, not just per
-  author totals
-- ownership should reuse the blame-derived file owner map already used by the
-  silo report
-- the hotspot time window should follow the same recent-window behavior used by
-  `pulse`
-- tests should lock exact ordering so later work does not silently drift from
-  this model
+## Non-Goals For First Implementation
+
+- no age or legacy weighting
+- no language-aware thresholds
+- no per-directory rollups
+- no branch-aware or team-aware heuristics
+
+## Why This Model
+
+- Keeps implementation straightforward with data already close at hand.
+- Produces a stable, testable 0-100 score.
+- Preserves the repo's existing silo severity intuition around 80% and 95%.
+- Prioritizes files that are both active and fragile, not merely large or busy.
