@@ -6,21 +6,23 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 )
 
 // CommitData represents information about a single commit.
 type CommitData struct {
-	Hash      string
-	Author    string
-	Email     string
-	Date      time.Time
-	Additions int
-	Deletions int
-	Files     int
-	Message   string
-	IsMerge   bool
+	Hash           string
+	Author         string
+	Email          string
+	Date           time.Time
+	Additions      int
+	Deletions      int
+	Files          int
+	FileExtensions map[string]bool
+	Message        string
+	IsMerge        bool
 }
 
 // GetCommitHistory retrieves a list of commits that touch the repository,
@@ -77,15 +79,16 @@ func GetCommitHistory(ctx context.Context, since string) ([]CommitData, error) {
 			}
 
 			currentCommit = &CommitData{
-				Hash:    parts[1],
-				Author:  parts[2],
-				Email:   strings.ToLower(parts[3]),
-				Date:    t,
-				IsMerge: strings.Contains(parents, " "),
-				Message: msg,
+				Hash:           parts[1],
+				Author:         parts[2],
+				Email:          strings.ToLower(parts[3]),
+				Date:           t,
+				FileExtensions: make(map[string]bool),
+				IsMerge:        strings.Contains(parents, " "),
+				Message:        msg,
 			}
 		} else if currentCommit != nil {
-			parts := strings.Fields(line)
+			parts := strings.SplitN(line, "\t", 3)
 			if len(parts) >= 3 {
 				var added, deleted int
 				if parts[0] != "-" {
@@ -97,6 +100,12 @@ func GetCommitHistory(ctx context.Context, since string) ([]CommitData, error) {
 				currentCommit.Additions += added
 				currentCommit.Deletions += deleted
 				currentCommit.Files++
+
+				ext := strings.ToLower(filepath.Ext(parts[2]))
+				if ext == "" {
+					ext = "[no extension]"
+				}
+				currentCommit.FileExtensions[ext] = true
 			}
 		}
 	}

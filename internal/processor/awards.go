@@ -269,5 +269,94 @@ func ProcessAwards(res models.Result, showProgress bool) []models.Award {
 		})
 	}
 
+	// 12. THE LANDLORD
+	var landlord *models.AuthorMetrics
+	maxExclusive := 0
+	for _, a := range authors {
+		if a.ExclusiveFiles > maxExclusive {
+			maxExclusive = a.ExclusiveFiles
+			landlord = a
+		}
+	}
+	if landlord != nil && maxExclusive > 0 {
+		awards = append(awards, models.Award{
+			ID:          "landlord",
+			Title:       "The Landlord",
+			Emoji:       "🏰",
+			Winner:      landlord.Name,
+			Vibe:        "Holding the keys to rooms nobody else quite knows.",
+			Description: "Awarded for owning the most files with a single surviving contributor.",
+			Value:       fmt.Sprintf("%d exclusive files", maxExclusive),
+		})
+	}
+
+	// 13. THE POLYGLOT
+	var polyglot *models.AuthorMetrics
+	maxExtensions := 0
+	for _, a := range authors {
+		extensionCount := len(a.FileExtensions)
+		if extensionCount > maxExtensions {
+			maxExtensions = extensionCount
+			polyglot = a
+		}
+	}
+	if polyglot != nil && maxExtensions > 0 {
+		awards = append(awards, models.Award{
+			ID:          "polyglot",
+			Title:       "The Polyglot",
+			Emoji:       "🦜",
+			Winner:      polyglot.Name,
+			Vibe:        "Fluent in every dialect the repository speaks.",
+			Description: "Awarded for working across the widest range of file extensions.",
+			Value:       fmt.Sprintf("%d file types", maxExtensions),
+		})
+	}
+
+	// 14. THE EVERGREEN
+	var evergreen *models.AuthorMetrics
+	maxRetention := 0.0
+	for _, a := range authors {
+		if a.LifetimeAdditions <= 0 || a.Loc <= 0 {
+			continue
+		}
+		retention := float64(a.Loc) / float64(a.LifetimeAdditions)
+		if retention > maxRetention {
+			maxRetention = retention
+			evergreen = a
+		}
+	}
+	if evergreen != nil {
+		awards = append(awards, models.Award{
+			ID:          "evergreen",
+			Title:       "The Evergreen",
+			Emoji:       "🌲",
+			Winner:      evergreen.Name,
+			Vibe:        "Ships code that keeps on living through every season.",
+			Description: "Awarded for the highest ratio of surviving lines to lifetime additions.",
+			Value:       fmt.Sprintf("%.0f%% retained", maxRetention*100.0),
+		})
+	}
+
+	// 15. THE MARATHONER
+	var marathoner *models.AuthorMetrics
+	maxMonths := 0
+	for _, a := range authors {
+		if a.Months > maxMonths {
+			maxMonths = a.Months
+			marathoner = a
+		}
+	}
+	if marathoner != nil && maxMonths > 0 {
+		awards = append(awards, models.Award{
+			ID:          "marathoner",
+			Title:       "The Marathoner",
+			Emoji:       "🏃",
+			Winner:      marathoner.Name,
+			Vibe:        "Still moving long after the sprint energy is gone.",
+			Description: "Awarded for being active across the most distinct months in repository history.",
+			Value:       fmt.Sprintf("%d active months", maxMonths),
+		})
+	}
+
 	return awards
 }

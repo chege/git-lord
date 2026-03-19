@@ -13,6 +13,8 @@
 
 Most Git stats tools get slow as your repo grows. `git-lord` is built in Go and utilizes parallel native processing to deliver results in milliseconds, not minutes.
 
+`git-lord` now keeps a repo-local cache under `.git/git-lord-cache` and reuses it until `HEAD` or tracked file contents change.
+
 ## 🚀 Subcommands
 
 ### 🏆 Ownership Leaderboard (`git lord`)
@@ -32,6 +34,10 @@ Behavioral analysis turned into a game.
 - **🤠 Indiana Jones:** Owner of the oldest surviving code.
 - **📚 The Novelist:** Most descriptive commit logs.
 - **🏎️ Speed Demon:** Shortest average time between commits.
+- **🏰 The Landlord:** Most exclusively owned files.
+- **🦜 The Polyglot:** Widest range of file types touched.
+- **🌲 The Evergreen:** Highest surviving-line retention ratio.
+- **🏃 The Marathoner:** Most active months across repo history.
 
 ### 🏛️ Archaeology (`git lord legacy` & `silos`)
 - **Legacy:** Breakdown your surviving lines by the year they were written.

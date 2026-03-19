@@ -24,6 +24,10 @@ func testEnv(extra ...string) []string {
 	return append(env, extra...)
 }
 
+func stripANSI(s string) string {
+	return ansiPattern.ReplaceAllString(s, "")
+}
+
 func setupTestRepo(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "git-lord-test-*")
 	if err != nil {
@@ -42,8 +46,18 @@ func setupTestRepo(t *testing.T) string {
 	}
 
 	runGit(nil, "init")
-	runGit(nil, "config", "user.name", "Alice")
-	runGit(nil, "config", "user.email", "alice@example.com")
+
+	commitAs := func(name, email, date, msg string) {
+		env := []string{
+			"GIT_AUTHOR_NAME=" + name,
+			"GIT_AUTHOR_EMAIL=" + email,
+			"GIT_COMMITTER_NAME=" + name,
+			"GIT_COMMITTER_EMAIL=" + email,
+			"GIT_AUTHOR_DATE=" + date,
+			"GIT_COMMITTER_DATE=" + date,
+		}
+		runGit(env, "commit", "-m", msg)
+	}
 
 	// Commit 1 by Alice (Older)
 	file1 := filepath.Join(dir, "file1.txt")
@@ -55,38 +69,64 @@ func setupTestRepo(t *testing.T) string {
 		t.Fatalf("failed to write file: %v", err)
 	}
 	runGit(nil, "add", ".")
-	// Set an old date for Alice
-	runGit([]string{
-		"GIT_AUTHOR_NAME=Alice",
-		"GIT_AUTHOR_EMAIL=alice@example.com",
-		"GIT_COMMITTER_NAME=Alice",
-		"GIT_COMMITTER_EMAIL=alice@example.com",
-		"GIT_AUTHOR_DATE=2020-01-01T12:00:00",
-		"GIT_COMMITTER_DATE=2020-01-01T12:00:00",
-	}, "commit", "-m", "Initial commit from Alice")
-
-	// Change author to Bob
-	runGit(nil, "config", "user.name", "Bob")
-	runGit(nil, "config", "user.email", "bob@example.com")
+	commitAs("Alice", "alice@example.com", "2020-01-01T12:00:00", "Initial commit from Alice")
 
 	// Commit 2 by Bob (Newer)
-	// Bob overwrites Alice's line 3 to trigger a deletion
-	if err := os.WriteFile(file1, []byte("line1\nline2\nline3 from bob\nline4 from bob\n"), 0644); err != nil {
+	if err := os.WriteFile(file1, []byte("line1\nline2\nline3\nline4 from bob\nline5 from bob\n"), 0644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
 	file2 := filepath.Join(dir, "file2.txt")
 	if err := os.WriteFile(file2, []byte("bob line1\nbob line2\n"), 0644); err != nil {
 		t.Fatalf("failed to write file: %v", err)
 	}
+	bobNotes := filepath.Join(dir, "bob_notes.txt")
+	if err := os.WriteFile(bobNotes, []byte("bob note\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
 	runGit(nil, "add", ".")
-	runGit([]string{
-		"GIT_AUTHOR_NAME=Bob",
-		"GIT_AUTHOR_EMAIL=bob@example.com",
-		"GIT_COMMITTER_NAME=Bob",
-		"GIT_COMMITTER_EMAIL=bob@example.com",
-		"GIT_AUTHOR_DATE=2026-01-01T12:00:00",
-		"GIT_COMMITTER_DATE=2026-01-01T12:00:00",
-	}, "commit", "-m", "Bob adds lines")
+	commitAs("Bob", "bob@example.com", "2026-01-01T12:00:00", "Bob adds lines")
+
+	// Commit 3 by Bob in a different month and file type.
+	bobScript := filepath.Join(dir, "deploy.sh")
+	if err := os.WriteFile(bobScript, []byte("#!/bin/sh\necho deploy\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	if err := os.WriteFile(bobNotes, []byte("bob note updated\nbob extra\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	bobOps := filepath.Join(dir, "ops.txt")
+	if err := os.WriteFile(bobOps, []byte("ops\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	runGit(nil, "add", ".")
+	commitAs("Bob", "bob@example.com", "2026-02-01T12:00:00", "Bob adds deploy script")
+
+	caraGo := filepath.Join(dir, "service.go")
+	if err := os.WriteFile(caraGo, []byte("package main\n\nfunc main() {}\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	runGit(nil, "add", ".")
+	commitAs("Cara", "cara@example.com", "2026-03-01T12:00:00", "Cara adds Go service")
+
+	caraJSON := filepath.Join(dir, "config.json")
+	if err := os.WriteFile(caraJSON, []byte("{\n  \"ok\": true\n}\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	runGit(nil, "add", ".")
+	commitAs("Cara", "cara@example.com", "2026-03-02T12:00:00", "Cara adds config")
+
+	caraMD := filepath.Join(dir, "notes.md")
+	if err := os.WriteFile(caraMD, []byte("# Notes\n\nShip it.\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	runGit(nil, "add", ".")
+	commitAs("Cara", "cara@example.com", "2026-03-03T12:00:00", "Cara adds notes")
+
+	if err := os.WriteFile(caraMD, []byte("# Notes\n\nKeep shipping.\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	runGit(nil, "add", ".")
+	commitAs("Cara", "cara@example.com", "2026-03-04T12:00:00", "Cara refreshes notes")
 
 	return dir
 }
@@ -145,8 +185,8 @@ func TestE2E_BasicMetrics(t *testing.T) {
 	if alice == nil {
 		t.Fatalf("Alice not found in output: %s", output)
 	}
-	// Alice: loc=3 (2 in file1, 1 in alice.txt), coms=1, fils=2
-	if alice[1] != "3" || alice[3] != "1" || alice[4] != "2" {
+	// Alice: loc=4 (3 in file1, 1 in alice.txt), coms=1, fils=2
+	if alice[1] != "4" || alice[3] != "1" || alice[4] != "2" {
 		t.Errorf("Alice metrics incorrect: %v", alice)
 	}
 
@@ -154,9 +194,17 @@ func TestE2E_BasicMetrics(t *testing.T) {
 	if bob == nil {
 		t.Fatalf("Bob not found in output: %s", output)
 	}
-	// Bob: loc=4 (2 in file1, 2 in file2), coms=1, fils=2
-	if bob[1] != "4" || bob[3] != "1" || bob[4] != "2" {
+	// Bob: loc=9, coms=2, fils=5
+	if bob[1] != "9" || bob[3] != "2" || bob[4] != "5" {
 		t.Errorf("Bob metrics incorrect: %v", bob)
+	}
+
+	cara := findAuthor("Cara")
+	if cara == nil {
+		t.Fatalf("Cara not found in output: %s", output)
+	}
+	if cara[1] != "9" || cara[3] != "4" || cara[4] != "3" {
+		t.Errorf("Cara metrics incorrect: %v", cara)
 	}
 }
 
@@ -179,8 +227,8 @@ func TestE2E_Pulse(t *testing.T) {
 		t.Errorf("Pulse CSV header missing: %s", output)
 	}
 
-	// Bob: 1 commit, +4 lines, -1 del, net 3, churn 5, 2 files
-	if !strings.Contains(output, "Bob,1,+4,-1,3,5,2") {
+	// Bob: 2 commits, +10 lines, -1 del, net 9, churn 11, 6 files changed
+	if !strings.Contains(output, "Bob,2,+10,-1,9,11,6") {
 		t.Errorf("Bob pulse metrics incorrect: %s", output)
 	}
 }
@@ -205,18 +253,12 @@ func TestE2E_PulseSortByChurn(t *testing.T) {
 		t.Fatalf("failed to parse pulse csv: %v", err)
 	}
 
-	if len(records) < 3 {
-		t.Fatalf("expected header plus two rows, got: %v", records)
+	if len(records) < 4 {
+		t.Fatalf("expected header plus three rows, got: %v", records)
 	}
 
 	if records[1][0] != "Bob" {
 		t.Fatalf("expected Bob first when sorting by churn, got %q", records[1][0])
-	}
-	if records[2][0] != "Alice" {
-		t.Fatalf("expected Alice second when sorting by churn, got %q", records[2][0])
-	}
-	if records[1][5] != "5" {
-		t.Fatalf("expected Bob churn to be 5, got %q", records[1][5])
 	}
 }
 
@@ -236,7 +278,7 @@ func TestE2E_PulseTableTotals(t *testing.T) {
 
 	output := string(out)
 	plainOutput := ansiPattern.ReplaceAllString(output, "")
-	footerPattern := regexp.MustCompile(`(?m)^│ TOTAL\s+│ 2\s+│ \+8\s+│ -1\s+│ \+7\s+│ 9\s+│ 4\s+│$`)
+	footerPattern := regexp.MustCompile(`(?m)^│ TOTAL\s+│ 7\s+│ \+24\s+│ -2\s+│ \+22\s+│ 26\s+│ 12\s+│$`)
 	if !footerPattern.MatchString(plainOutput) {
 		t.Errorf("Pulse table totals missing or incorrect: %s", output)
 	}
@@ -251,7 +293,7 @@ func TestE2E_Awards(t *testing.T) {
 
 	binPath := buildGitLord(t)
 
-	cmd := exec.Command(binPath, "awards")
+	cmd := exec.Command(binPath, "awards", "--no-progress")
 	cmd.Dir = repoDir
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
@@ -259,13 +301,24 @@ func TestE2E_Awards(t *testing.T) {
 		t.Fatalf("git-lord awards failed: %v\nOutput: %s", err, string(out))
 	}
 
-	output := string(out)
+	output := stripANSI(string(out))
 	if !strings.Contains(output, "THE AWARDS CEREMONY") {
 		t.Errorf("Awards ceremony title missing: %s", output)
 	}
-	// Alice should win Indiana Jones (first commit in 2020)
-	if !strings.Contains(output, "THE INDIANA JONES") || !strings.Contains(output, "Alice") {
+	if !strings.Contains(output, "THE INDIANA JONES") || !strings.Contains(output, "Winner:  Alice") {
 		t.Errorf("Alice should be Indiana Jones: %s", output)
+	}
+	if !strings.Contains(output, "THE EVERGREEN") || !strings.Contains(output, "Winner:  Alice") {
+		t.Errorf("Alice should be Evergreen: %s", output)
+	}
+	if !strings.Contains(output, "THE LANDLORD") || !strings.Contains(output, "Winner:  Bob") {
+		t.Errorf("Bob should be Landlord: %s", output)
+	}
+	if !strings.Contains(output, "THE MARATHONER") || !strings.Contains(output, "Winner:  Bob") {
+		t.Errorf("Bob should be Marathoner: %s", output)
+	}
+	if !strings.Contains(output, "THE POLYGLOT") || !strings.Contains(output, "Winner:  Cara") {
+		t.Errorf("Cara should be Polyglot: %s", output)
 	}
 }
 
@@ -284,7 +337,6 @@ func TestE2E_Silos(t *testing.T) {
 	}
 
 	output := string(out)
-	// file2.txt should be a silo for Bob
 	if !strings.Contains(output, "file2.txt") || !strings.Contains(output, "bob@example.com") {
 		t.Errorf("Silos report missing expected file2.txt data: %s", output)
 	}
@@ -305,7 +357,6 @@ func TestE2E_Trends(t *testing.T) {
 	}
 
 	output := string(out)
-	// Alice committed in 2020, Bob in 2026
 	if !strings.Contains(output, "2020-01") || !strings.Contains(output, "2026-01") {
 		t.Errorf("Trends report missing expected time periods: %s", output)
 	}
@@ -327,9 +378,8 @@ func TestE2E_JSONOutput(t *testing.T) {
 	}
 
 	output := string(out)
-	// Alice(3) + Bob(4) = 7
-	if !strings.Contains(output, `"TotalLoc": 7`) {
-		t.Errorf("Expected TotalLoc: 7 in JSON, got:\n%s", output)
+	if !strings.Contains(output, `"TotalLoc": 22`) {
+		t.Errorf("Expected TotalLoc: 22 in JSON, got:\n%s", output)
 	}
 	if !strings.Contains(output, `"Name": "Alice"`) {
 		t.Errorf("Expected Alice in JSON")

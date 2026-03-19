@@ -162,6 +162,10 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 			m.MergeCommits++
 		}
 
+		for ext := range commit.FileExtensions {
+			m.FileExtensions[ext] = true
+		}
+
 		global.TotalCommits++
 		authorTimestamps[id] = append(authorTimestamps[id], commit.Date.Unix())
 		allTimestamps = append(allTimestamps, commit.Date.Unix())
@@ -173,7 +177,7 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 		if len(blame.AuthorLines) > 0 {
 			global.TotalFiles++
 		}
-		
+
 		fileOwners[path] = make(map[string]int)
 
 		if len(blame.AuthorLines) == 1 {
@@ -213,16 +217,16 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 
 	for id, timestamps := range authorTimestamps {
 		sort.SliceStable(timestamps, func(i, j int) bool { return timestamps[i] < timestamps[j] })
-		
+
 		hours := metrics.CalculateHours(timestamps, 60)
 		months := metrics.CalculateMonths(timestamps)
 		authors[id].Hours = hours
 		authors[id].Months = months
 		authors[id].MaxGap = metrics.CalculateMaxGap(timestamps)
-		
+
 		for i := 1; i < len(timestamps); i++ {
 			diff := timestamps[i] - timestamps[i-1]
-			if diff < 8*3600 { 
+			if diff < 8*3600 {
 				authors[id].CommitIntervals = append(authors[id].CommitIntervals, diff)
 			}
 		}
