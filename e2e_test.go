@@ -10,6 +10,21 @@ import (
 	"testing"
 )
 
+func cleanGitEnv(extra []string) []string {
+	base := os.Environ()
+	cleaned := make([]string, 0, len(base)+len(extra))
+	for _, kv := range base {
+		if strings.HasPrefix(kv, "GIT_AUTHOR_NAME=") ||
+			strings.HasPrefix(kv, "GIT_AUTHOR_EMAIL=") ||
+			strings.HasPrefix(kv, "GIT_COMMITTER_NAME=") ||
+			strings.HasPrefix(kv, "GIT_COMMITTER_EMAIL=") {
+			continue
+		}
+		cleaned = append(cleaned, kv)
+	}
+	return append(cleaned, extra...)
+}
+
 func setupTestRepo(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "git-lord-test-*")
 	if err != nil {
@@ -20,7 +35,7 @@ func setupTestRepo(t *testing.T) string {
 	runGit := func(env []string, args ...string) {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), env...)
+		cmd.Env = cleanGitEnv(env)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("git %v failed: %v\nOutput: %s", args, err, out)
@@ -67,7 +82,7 @@ func buildGitLord(t *testing.T) string {
 	tempBin := filepath.Join(t.TempDir(), "git-lord")
 
 	// Build the CLI binary
-	cmd := exec.Command("go", "build", "-o", tempBin, "./cmd/git-lord")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", tempBin, "./cmd/git-lord")
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("failed to build git-lord: %v\nOutput: %s", err, string(out))
@@ -151,6 +166,34 @@ func TestE2E_Pulse(t *testing.T) {
 	// Bob: 1 commit, +4 lines, -1 del, net 3, churn 5, 2 files
 	if !strings.Contains(output, "Bob,1,+4,-1,3,5,2") {
 		t.Errorf("Bob pulse metrics incorrect: %s", output)
+	}
+}
+
+func TestE2E_PulseSortByChurn(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	defer func() { _ = os.RemoveAll(repoDir) }()
+
+	binPath := buildGitLord(t)
+
+	cmd := exec.Command(binPath, "pulse", "--days", "5000", "--format", "csv", "--sort", "churn")
+	cmd.Dir = repoDir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git-lord pulse --sort churn failed: %v\nOutput: %s", err, string(out))
+	}
+
+	reader := csv.NewReader(strings.NewReader(string(out)))
+	records, err := reader.ReadAll()
+	if err != nil {
+		t.Fatalf("failed to parse pulse csv: %v", err)
+	}
+
+	if len(records) < 3 {
+		t.Fatalf("expected header plus two rows, got: %v", records)
+	}
+
+	if records[1][0] != "Bob" {
+		t.Fatalf("expected Bob first when sorting by churn, got %q", records[1][0])
 	}
 }
 
