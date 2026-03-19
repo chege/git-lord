@@ -6,9 +6,23 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 )
+
+var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func testEnv(extra ...string) []string {
+	env := make([]string, 0, len(os.Environ())+len(extra))
+	for _, entry := range os.Environ() {
+		if strings.HasPrefix(entry, "GIT_") {
+			continue
+		}
+		env = append(env, entry)
+	}
+	return append(env, extra...)
+}
 
 func setupTestRepo(t *testing.T) string {
 	dir, err := os.MkdirTemp("", "git-lord-test-*")
@@ -20,7 +34,7 @@ func setupTestRepo(t *testing.T) string {
 	runGit := func(env []string, args ...string) {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		cmd.Env = append(os.Environ(), env...)
+		cmd.Env = testEnv(env...)
 		out, err := cmd.CombinedOutput()
 		if err != nil {
 			t.Fatalf("git %v failed: %v\nOutput: %s", args, err, out)
@@ -42,7 +56,14 @@ func setupTestRepo(t *testing.T) string {
 	}
 	runGit(nil, "add", ".")
 	// Set an old date for Alice
-	runGit([]string{"GIT_AUTHOR_DATE=2020-01-01T12:00:00", "GIT_COMMITTER_DATE=2020-01-01T12:00:00"}, "commit", "-m", "Initial commit from Alice")
+	runGit([]string{
+		"GIT_AUTHOR_NAME=Alice",
+		"GIT_AUTHOR_EMAIL=alice@example.com",
+		"GIT_COMMITTER_NAME=Alice",
+		"GIT_COMMITTER_EMAIL=alice@example.com",
+		"GIT_AUTHOR_DATE=2020-01-01T12:00:00",
+		"GIT_COMMITTER_DATE=2020-01-01T12:00:00",
+	}, "commit", "-m", "Initial commit from Alice")
 
 	// Change author to Bob
 	runGit(nil, "config", "user.name", "Bob")
@@ -58,7 +79,14 @@ func setupTestRepo(t *testing.T) string {
 		t.Fatalf("failed to write file: %v", err)
 	}
 	runGit(nil, "add", ".")
-	runGit([]string{"GIT_AUTHOR_DATE=2026-01-01T12:00:00", "GIT_COMMITTER_DATE=2026-01-01T12:00:00"}, "commit", "-m", "Bob adds lines")
+	runGit([]string{
+		"GIT_AUTHOR_NAME=Bob",
+		"GIT_AUTHOR_EMAIL=bob@example.com",
+		"GIT_COMMITTER_NAME=Bob",
+		"GIT_COMMITTER_EMAIL=bob@example.com",
+		"GIT_AUTHOR_DATE=2026-01-01T12:00:00",
+		"GIT_COMMITTER_DATE=2026-01-01T12:00:00",
+	}, "commit", "-m", "Bob adds lines")
 
 	return dir
 }
@@ -67,7 +95,8 @@ func buildGitLord(t *testing.T) string {
 	tempBin := filepath.Join(t.TempDir(), "git-lord")
 
 	// Build the CLI binary
-	cmd := exec.Command("go", "build", "-o", tempBin, "./cmd/git-lord")
+	cmd := exec.Command("go", "build", "-buildvcs=false", "-o", tempBin, "./cmd/git-lord")
+	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("failed to build git-lord: %v\nOutput: %s", err, string(out))
@@ -84,6 +113,7 @@ func TestE2E_BasicMetrics(t *testing.T) {
 	// Run git-lord with CSV output for deterministic parsing
 	cmd := exec.Command(binPath, "--all", "--format", "csv")
 	cmd.Dir = repoDir
+	cmd.Env = testEnv()
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -138,6 +168,7 @@ func TestE2E_Pulse(t *testing.T) {
 
 	cmd := exec.Command(binPath, "pulse", "--days", "100", "--format", "csv")
 	cmd.Dir = repoDir
+	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git-lord pulse failed: %v\nOutput: %s", err, string(out))
@@ -154,6 +185,31 @@ func TestE2E_Pulse(t *testing.T) {
 	}
 }
 
+func TestE2E_PulseTableTotals(t *testing.T) {
+	repoDir := setupTestRepo(t)
+	defer func() { _ = os.RemoveAll(repoDir) }()
+
+	binPath := buildGitLord(t)
+
+	cmd := exec.Command(binPath, "pulse", "--days", "100", "--no-progress")
+	cmd.Dir = repoDir
+	cmd.Env = testEnv()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git-lord pulse failed: %v\nOutput: %s", err, string(out))
+	}
+
+	output := string(out)
+	plainOutput := ansiPattern.ReplaceAllString(output, "")
+	footerPattern := regexp.MustCompile(`(?m)^│ TOTAL\s+│ 2\s+│ \+8\s+│ -1\s+│ \+7\s+│ 9\s+│ 4\s+│$`)
+	if !footerPattern.MatchString(plainOutput) {
+		t.Errorf("Pulse table totals missing or incorrect: %s", output)
+	}
+	if !strings.Contains(output, "ACTIVITY PULSE") {
+		t.Errorf("Pulse table header missing: %s", output)
+	}
+}
+
 func TestE2E_Awards(t *testing.T) {
 	repoDir := setupTestRepo(t)
 	defer func() { _ = os.RemoveAll(repoDir) }()
@@ -162,6 +218,7 @@ func TestE2E_Awards(t *testing.T) {
 
 	cmd := exec.Command(binPath, "awards")
 	cmd.Dir = repoDir
+	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git-lord awards failed: %v\nOutput: %s", err, string(out))
@@ -185,6 +242,7 @@ func TestE2E_Silos(t *testing.T) {
 
 	cmd := exec.Command(binPath, "silos", "--min-loc", "0")
 	cmd.Dir = repoDir
+	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git-lord silos failed: %v\nOutput: %s", err, string(out))
@@ -205,6 +263,7 @@ func TestE2E_Trends(t *testing.T) {
 
 	cmd := exec.Command(binPath, "trends")
 	cmd.Dir = repoDir
+	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		t.Fatalf("git-lord trends failed: %v\nOutput: %s", err, string(out))
@@ -225,6 +284,7 @@ func TestE2E_JSONOutput(t *testing.T) {
 
 	cmd := exec.Command(binPath, "--format", "json")
 	cmd.Dir = repoDir
+	cmd.Env = testEnv()
 
 	out, err := cmd.CombinedOutput()
 	if err != nil {

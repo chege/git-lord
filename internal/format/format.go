@@ -41,26 +41,42 @@ type column struct {
 type pulseColumn struct {
 	Header    string
 	ValueFunc func(p models.PulseStat) string
+	Footer    func(total models.PulseStat) string
+}
+
+func formatPulseNet(net int) string {
+	color := text.FgGreen
+	sign := "+"
+	if net < 0 {
+		color = text.FgRed
+		sign = ""
+	}
+	return color.Sprint(fmt.Sprintf("%s%d", sign, net))
 }
 
 func getPulseColumns() []pulseColumn {
 	return []pulseColumn{
-		{Header: "Author", ValueFunc: func(p models.PulseStat) string { return p.Name }},
-		{Header: "Commits", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("%d", p.Commits) }},
-		{Header: "Additions", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("+%d", p.Additions) }},
-		{Header: "Deletions", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("-%d", p.Deletions) }},
-		{Header: "Net", ValueFunc: func(p models.PulseStat) string {
-			color := text.FgGreen
-			sign := "+"
-			if p.Net < 0 {
-				color = text.FgRed
-				sign = ""
-			}
-			return color.Sprint(fmt.Sprintf("%s%d", sign, p.Net))
-		}},
-		{Header: "Churn", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("%d", p.Churn) }},
-		{Header: "Files", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("%d", p.Files) }},
+		{Header: "Author", ValueFunc: func(p models.PulseStat) string { return p.Name }, Footer: func(total models.PulseStat) string { return "Total" }},
+		{Header: "Commits", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("%d", p.Commits) }, Footer: func(total models.PulseStat) string { return fmt.Sprintf("%d", total.Commits) }},
+		{Header: "Additions", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("+%d", p.Additions) }, Footer: func(total models.PulseStat) string { return fmt.Sprintf("+%d", total.Additions) }},
+		{Header: "Deletions", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("-%d", p.Deletions) }, Footer: func(total models.PulseStat) string { return fmt.Sprintf("-%d", total.Deletions) }},
+		{Header: "Net", ValueFunc: func(p models.PulseStat) string { return formatPulseNet(p.Net) }, Footer: func(total models.PulseStat) string { return formatPulseNet(total.Net) }},
+		{Header: "Churn", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("%d", p.Churn) }, Footer: func(total models.PulseStat) string { return fmt.Sprintf("%d", total.Churn) }},
+		{Header: "Files", ValueFunc: func(p models.PulseStat) string { return fmt.Sprintf("%d", p.Files) }, Footer: func(total models.PulseStat) string { return fmt.Sprintf("%d", total.Files) }},
 	}
+}
+
+func summarizePulse(stats []models.PulseStat) models.PulseStat {
+	var total models.PulseStat
+	for _, stat := range stats {
+		total.Commits += stat.Commits
+		total.Additions += stat.Additions
+		total.Deletions += stat.Deletions
+		total.Net += stat.Net
+		total.Churn += stat.Churn
+		total.Files += stat.Files
+	}
+	return total
 }
 
 func getColumns(global models.GlobalMetrics, cfg models.Config) []column {
@@ -206,6 +222,7 @@ func PrintPulse(stats []models.PulseStat) {
 	t := newTableWriter(text.FgCyan)
 
 	cols := getPulseColumns()
+	total := summarizePulse(stats)
 	headerRow := make(table.Row, len(cols))
 	for i, c := range cols {
 		headerRow[i] = c.Header
@@ -219,6 +236,13 @@ func PrintPulse(stats []models.PulseStat) {
 		}
 		t.AppendRow(row)
 	}
+
+	t.AppendSeparator()
+	footerRow := make(table.Row, len(cols))
+	for i, c := range cols {
+		footerRow[i] = c.Footer(total)
+	}
+	t.AppendFooter(footerRow)
 
 	t.Render()
 }
