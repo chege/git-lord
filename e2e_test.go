@@ -191,7 +191,7 @@ func TestE2E_PulseTableTotals(t *testing.T) {
 
 	binPath := buildGitLord(t)
 
-	cmd := exec.Command(binPath, "pulse", "--days", "100", "--no-progress")
+	cmd := exec.Command(binPath, "pulse", "--days", "10000", "--no-progress")
 	cmd.Dir = repoDir
 	cmd.Env = testEnv()
 	out, err := cmd.CombinedOutput()
