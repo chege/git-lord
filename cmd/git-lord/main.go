@@ -144,7 +144,7 @@ func main() {
 }
 
 func setupGlobalFlags(fs *flag.FlagSet, cfg *models.Config) {
-	fs.StringVar(&cfg.Sort, "sort", "loc", "Sort metric: loc, coms, fils, hrs")
+	fs.StringVar(&cfg.Sort, "sort", "loc", "Sort metric: leaderboard loc|coms|fils|hrs; pulse commits|additions|deletions|net|churn|files")
 	fs.StringVar(&cfg.Since, "since", "", "Filter by date")
 	fs.StringVar(&cfg.Include, "include", "", "Include glob pattern")
 	fs.StringVar(&cfg.Exclude, "exclude", "", "Exclude glob pattern")
@@ -232,7 +232,7 @@ func runPulse(ctx context.Context, cfg models.Config) error {
 		format.PrintReportHeader("Activity Pulse", cfg.Since, 0, len(commits))
 	}
 
-	stats := processor.ProcessPulse(commits, showProgress)
+	stats := processor.ProcessPulse(commits, cfg.Sort, showProgress)
 
 	switch cfg.Format {
 	case "json":

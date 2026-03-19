@@ -4,10 +4,77 @@ import (
 	"context"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/chege/git-lord/internal/gitcmd"
 	"github.com/chege/git-lord/internal/models"
 )
+
+func TestProcessPulseSortMetrics(t *testing.T) {
+	commits := []gitcmd.CommitData{
+		{
+			Author:    "Alice",
+			Email:     "alice@example.com",
+			Date:      time.Unix(100, 0),
+			Additions: 3,
+			Deletions: 0,
+			Files:     1,
+		},
+		{
+			Author:    "Alice",
+			Email:     "alice@example.com",
+			Date:      time.Unix(200, 0),
+			Additions: 1,
+			Deletions: 0,
+			Files:     1,
+		},
+		{
+			Author:    "Bob",
+			Email:     "bob@example.com",
+			Date:      time.Unix(300, 0),
+			Additions: 10,
+			Deletions: 9,
+			Files:     5,
+		},
+		{
+			Author:    "Carol",
+			Email:     "carol@example.com",
+			Date:      time.Unix(400, 0),
+			Additions: 10,
+			Deletions: 0,
+			Files:     2,
+		},
+	}
+
+	tests := []struct {
+		name   string
+		sort   string
+		first  string
+		second string
+	}{
+		{name: "default commits", sort: "", first: "Alice", second: "Bob"},
+		{name: "sort additions", sort: "additions", first: "Bob", second: "Carol"},
+		{name: "sort deletions", sort: "deletions", first: "Bob", second: "Alice"},
+		{name: "sort net", sort: "net", first: "Carol", second: "Alice"},
+		{name: "sort churn", sort: "churn", first: "Bob", second: "Carol"},
+		{name: "sort files", sort: "files", first: "Bob", second: "Alice"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stats := ProcessPulse(commits, tt.sort, false)
+			if len(stats) < 2 {
+				t.Fatalf("expected at least two stats, got %d", len(stats))
+			}
+			if stats[0].Name != tt.first {
+				t.Fatalf("expected first author %q, got %q", tt.first, stats[0].Name)
+			}
+			if stats[1].Name != tt.second {
+				t.Fatalf("expected second author %q, got %q", tt.second, stats[1].Name)
+			}
+		})
+	}
+}
 
 func TestCalculateBusFactor(t *testing.T) {
 	tests := []struct {
@@ -79,7 +146,7 @@ func BenchmarkProcessRepository(b *testing.B) {
 	for i := 0; i < 20; i++ {
 		files[i] = "internal/processor/processor.go"
 	}
-	commits := []gitcmd.CommitData{} 
+	commits := []gitcmd.CommitData{}
 
 	numCPU := runtime.NumCPU()
 	ctx := context.Background()

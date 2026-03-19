@@ -106,7 +106,7 @@ git lord pulse --days 30 --format csv
 | Flag | Default | Description |
 | :--- | :--- | :--- |
 | `--all` | `false` | Show every single metric and column. |
-| `--sort` | `loc` | Sort by: `loc`, `coms`, `fils`, `hrs`. |
+| `--sort` | `loc` | Sort by command-specific metrics; `pulse` supports `commits`, `additions`, `deletions`, `net`, `churn`, and `files`. |
 | `--format` | `table` | Output: `table`, `json`, `csv`. |
 | `--since` | `""` | Filter by date (e.g. "2023-01-01"). |
 | `--no-progress` | `false` | Hide the ASCII spinner. |
