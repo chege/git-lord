@@ -145,7 +145,7 @@ func TestCalculateMaxGap(t *testing.T) {
 			name: "Multiple commits with gaps",
 			timestamps: []int64{
 				100000,
-				100000 + 86400,      // 1 day gap
+				100000 + 86400,       // 1 day gap
 				100000 + (5 * 86400), // 4 day gap from prev
 				100000 + (6 * 86400), // 1 day gap from prev
 			},
