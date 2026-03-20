@@ -1,4 +1,4 @@
-.PHONY: build test lint clean format
+.PHONY: build test lint vet clean format
 
 BINARY_NAME=git-lord
 BUILD_DIR=bin
@@ -11,6 +11,9 @@ test:
 
 lint:
 	golangci-lint run
+
+vet:
+	go vet ./...
 
 format:
 	gofmt -w .
