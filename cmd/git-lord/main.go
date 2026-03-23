@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/chege/git-lord/internal/format"
 	"github.com/chege/git-lord/internal/gitcmd"
@@ -42,6 +43,10 @@ func main() {
 	trendFs := flag.NewFlagSet("trends", flag.ExitOnError)
 	setupGlobalFlags(trendFs, &cfg)
 
+	hotspotFs := flag.NewFlagSet("hotspot", flag.ExitOnError)
+	setupGlobalFlags(hotspotFs, &cfg)
+	hotspotFs.IntVar(&cfg.Window, "window", 30, "Analysis window in days")
+
 	rootFs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: git-lord [command] [options]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
@@ -51,6 +56,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  legacy     Show breakdown of code age by year\n")
 		fmt.Fprintf(os.Stderr, "  silos      Show high-risk files with low bus factor\n")
 		fmt.Fprintf(os.Stderr, "  trends     Show repository growth trends by month\n")
+		fmt.Fprintf(os.Stderr, "  hotspot    Show high-churn concentration risk files\n")
 		fmt.Fprintf(os.Stderr, "  help       Show this help screen\n\n")
 		fmt.Fprintf(os.Stderr, "Leaderboard Options:\n")
 		rootFs.PrintDefaults()
@@ -121,6 +127,17 @@ func main() {
 			return
 		}
 		handleError(runTrends(ctx, cfg))
+	case "hotspot":
+		_ = hotspotFs.Parse(os.Args[2:])
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
+		if cfg.Window <= 0 {
+			cfg.Window = 30
+		}
+		cfg.Since = fmt.Sprintf("%d days ago", cfg.Window)
+		handleError(runHotspot(ctx, cfg))
 	case "help":
 		rootFs.Usage()
 	case "-h", "--help":
@@ -317,6 +334,35 @@ func runAwards(ctx context.Context, cfg models.Config) error {
 		return format.PrintAwardsCSV(awards)
 	default:
 		format.PrintAwards(awards)
+	}
+	return nil
+}
+
+func runHotspot(ctx context.Context, cfg models.Config) error {
+	filteredFiles, commits, err := gatherData(ctx, cfg, true)
+	if err != nil {
+		return err
+	}
+
+	showProgress := !cfg.NoProgress
+	if cfg.Format == "json" || cfg.Format == "csv" {
+		showProgress = false
+	}
+
+	if cfg.Format == "table" {
+		format.PrintReportHeader("Hotspot Analysis", cfg.Since, len(filteredFiles), len(commits))
+	}
+
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0)
+	hotspots := processor.ProcessHotspots(result, commits, cfg.Window, time.Now())
+
+	switch cfg.Format {
+	case "json":
+		return format.PrintHotspotsJSON(hotspots)
+	case "csv":
+		return format.PrintHotspotsCSV(hotspots)
+	default:
+		format.PrintHotspots(hotspots)
 	}
 	return nil
 }
