@@ -130,6 +130,37 @@ func GetBlobHash(filePath string) (string, error) {
 	return strings.TrimSpace(string(output)), nil
 }
 
+// GetBlobHashesBatch retrieves hashes for multiple files in a single git call.
+// Falls back to individual calls if the batch operation fails.
+func GetBlobHashesBatch(filePaths []string) (map[string]string, error) {
+	if len(filePaths) == 0 {
+		return make(map[string]string), nil
+	}
+
+	cmd := exec.Command("git", "hash-object", "--stdin-paths")
+	cmd.Stdin = strings.NewReader(strings.Join(filePaths, "\n"))
+
+	output, err := cmd.Output()
+	if err != nil {
+		result := make(map[string]string)
+		for _, path := range filePaths {
+			if hash, err := GetBlobHash(path); err == nil {
+				result[path] = hash
+			}
+		}
+		return result, nil
+	}
+
+	hashes := strings.Split(strings.TrimSpace(string(output)), "\n")
+	result := make(map[string]string)
+	for i, path := range filePaths {
+		if i < len(hashes) {
+			result[path] = hashes[i]
+		}
+	}
+	return result, nil
+}
+
 func GetHEAD() (string, error) {
 	cmd := exec.Command("git", "rev-parse", "HEAD")
 	output, err := cmd.Output()

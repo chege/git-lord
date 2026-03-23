@@ -266,25 +266,25 @@ func BenchmarkProcessRepository(b *testing.B) {
 
 	b.Run("NumCPUx1", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = ProcessRepository(ctx, files, commits, false, numCPU)
+			_ = ProcessRepository(ctx, files, commits, false, numCPU, nil)
 		}
 	})
 
 	b.Run("NumCPUx2", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = ProcessRepository(ctx, files, commits, false, numCPU*2)
+			_ = ProcessRepository(ctx, files, commits, false, numCPU*2, nil)
 		}
 	})
 
 	b.Run("NumCPUx4", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = ProcessRepository(ctx, files, commits, false, numCPU*4)
+			_ = ProcessRepository(ctx, files, commits, false, numCPU*4, nil)
 		}
 	})
 
 	b.Run("NumCPUx8", func(b *testing.B) {
 		for i := 0; i < b.N; i++ {
-			_ = ProcessRepository(ctx, files, commits, false, numCPU*8)
+			_ = ProcessRepository(ctx, files, commits, false, numCPU*8, nil)
 		}
 	})
 }

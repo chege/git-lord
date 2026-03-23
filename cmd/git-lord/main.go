@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/chege/git-lord/internal/cache"
 	"github.com/chege/git-lord/internal/format"
 	"github.com/chege/git-lord/internal/gitcmd"
 	"github.com/chege/git-lord/internal/models"
@@ -168,6 +169,7 @@ func setupGlobalFlags(fs *flag.FlagSet, cfg *models.Config) {
 	fs.StringVar(&cfg.Format, "format", "table", "Output format: table, json, csv")
 	fs.BoolVar(&cfg.NoHours, "no-hours", false, "Disable hours calculation")
 	fs.BoolVar(&cfg.NoProgress, "no-progress", false, "Disable progress bar")
+	fs.BoolVar(&cfg.NoCache, "no-cache", false, "Disable caching of blame data")
 	fs.IntVar(&cfg.Days, "days", 30, "Window in days for the 'pulse' command")
 	fs.BoolVar(&cfg.Version, "version", false, "Show version information")
 }
@@ -206,6 +208,13 @@ func gatherData(ctx context.Context, cfg models.Config, needFiles bool) ([]strin
 }
 
 func runLeaderboard(ctx context.Context, cfg models.Config) error {
+	// Load cache
+	var c *cache.Cache
+	if !cfg.NoCache {
+		headHash, _ := cache.GetHEAD()
+		c, _ = cache.Load(headHash)
+	}
+
 	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
@@ -220,7 +229,13 @@ func runLeaderboard(ctx context.Context, cfg models.Config) error {
 		format.PrintReportHeader("Ownership Leaderboard", cfg.Since, len(filteredFiles), len(commits))
 	}
 
-	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0)
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0, c)
+
+	// Save cache
+	if c != nil {
+		_ = c.Save()
+	}
+
 	stats := format.GenerateStats(result.Result, cfg)
 
 	switch cfg.Format {
@@ -263,6 +278,13 @@ func runPulse(ctx context.Context, cfg models.Config) error {
 }
 
 func runLegacy(ctx context.Context, cfg models.Config) error {
+	// Load cache
+	var c *cache.Cache
+	if !cfg.NoCache {
+		headHash, _ := cache.GetHEAD()
+		c, _ = cache.Load(headHash)
+	}
+
 	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
@@ -272,13 +294,26 @@ func runLegacy(ctx context.Context, cfg models.Config) error {
 		format.PrintReportHeader("Legacy Report", cfg.Since, len(filteredFiles), len(commits))
 	}
 
-	result := processor.ProcessRepository(ctx, filteredFiles, commits, !cfg.NoProgress, 0)
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, !cfg.NoProgress, 0, c)
+
+	// Save cache
+	if c != nil {
+		_ = c.Save()
+	}
+
 	stats := processor.ProcessLegacy(result.Result)
 	format.PrintLegacy(stats)
 	return nil
 }
 
 func runSilos(ctx context.Context, cfg models.Config) error {
+	// Load cache
+	var c *cache.Cache
+	if !cfg.NoCache {
+		headHash, _ := cache.GetHEAD()
+		c, _ = cache.Load(headHash)
+	}
+
 	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
@@ -288,7 +323,13 @@ func runSilos(ctx context.Context, cfg models.Config) error {
 		format.PrintReportHeader("Knowledge Silos", cfg.Since, len(filteredFiles), len(commits))
 	}
 
-	result := processor.ProcessRepository(ctx, filteredFiles, commits, !cfg.NoProgress, 0)
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, !cfg.NoProgress, 0, c)
+
+	// Save cache
+	if c != nil {
+		_ = c.Save()
+	}
+
 	silos := processor.ProcessSilos(result, cfg.MinLOC)
 	format.PrintSilos(silos)
 	return nil
@@ -310,6 +351,13 @@ func runTrends(ctx context.Context, cfg models.Config) error {
 }
 
 func runAwards(ctx context.Context, cfg models.Config) error {
+	// Load cache
+	var c *cache.Cache
+	if !cfg.NoCache {
+		headHash, _ := cache.GetHEAD()
+		c, _ = cache.Load(headHash)
+	}
+
 	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
@@ -324,7 +372,13 @@ func runAwards(ctx context.Context, cfg models.Config) error {
 		format.PrintReportHeader("Awards Ceremony", cfg.Since, len(filteredFiles), len(commits))
 	}
 
-	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0)
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0, c)
+
+	// Save cache
+	if c != nil {
+		_ = c.Save()
+	}
+
 	awards := processor.ProcessAwards(result.Result, showProgress)
 
 	switch cfg.Format {
@@ -339,6 +393,13 @@ func runAwards(ctx context.Context, cfg models.Config) error {
 }
 
 func runHotspot(ctx context.Context, cfg models.Config) error {
+	// Load cache
+	var c *cache.Cache
+	if !cfg.NoCache {
+		headHash, _ := cache.GetHEAD()
+		c, _ = cache.Load(headHash)
+	}
+
 	filteredFiles, commits, err := gatherData(ctx, cfg, true)
 	if err != nil {
 		return err
@@ -353,7 +414,13 @@ func runHotspot(ctx context.Context, cfg models.Config) error {
 		format.PrintReportHeader("Hotspot Analysis", cfg.Since, len(filteredFiles), len(commits))
 	}
 
-	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0)
+	result := processor.ProcessRepository(ctx, filteredFiles, commits, showProgress, 0, c)
+
+	// Save cache
+	if c != nil {
+		_ = c.Save()
+	}
+
 	hotspots := processor.ProcessHotspots(result, commits, cfg.Window, time.Now())
 
 	switch cfg.Format {

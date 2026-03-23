@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/chege/git-lord/internal/cache"
 	"github.com/chege/git-lord/internal/gitcmd"
 	"github.com/chege/git-lord/internal/metrics"
 	"github.com/chege/git-lord/internal/models"
@@ -67,7 +68,7 @@ type ResultExtended struct {
 }
 
 // ProcessRepository orchestrates the gathering and aggregation of metrics.
-func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.CommitData, showProgress bool, workerCount int) ResultExtended {
+func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.CommitData, showProgress bool, workerCount int, c *cache.Cache) ResultExtended {
 	if len(commits) == 0 && len(files) == 0 {
 		return ResultExtended{}
 	}
@@ -75,11 +76,6 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 	if workerCount <= 0 {
 		workerCount = runtime.NumCPU() * 2
 	}
-	filesChan := make(chan string, len(files))
-	for _, f := range files {
-		filesChan <- f
-	}
-	close(filesChan)
 
 	spinner := newSpinner("Blaming files", showProgress)
 	defer spinner.Stop()
@@ -88,6 +84,32 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 		Path string
 		Data gitcmd.BlameData
 	}
+
+	var blobHashes map[string]string
+	if c != nil && len(files) > 0 {
+		blobHashes, _ = cache.GetBlobHashesBatch(files)
+	}
+
+	filesToProcess := make([]string, 0, len(files))
+	var cachedBlames []fileBlame
+
+	for _, file := range files {
+		if c != nil {
+			if hash, ok := blobHashes[file]; ok {
+				if cached, found := c.Get(file, hash); found {
+					cachedBlames = append(cachedBlames, fileBlame{Path: file, Data: gitcmd.BlameData{AuthorLines: cached}})
+					continue
+				}
+			}
+		}
+		filesToProcess = append(filesToProcess, file)
+	}
+
+	filesChan := make(chan string, len(filesToProcess))
+	for _, f := range filesToProcess {
+		filesChan <- f
+	}
+	close(filesChan)
 
 	var wg sync.WaitGroup
 	resultsChan := make(chan fileBlame, workerCount*2)
@@ -101,7 +123,7 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 				case <-ctx.Done():
 					return
 				default:
-					blameData, err := gitcmd.GetBlame(ctx, file)
+					blameData, err := gitcmd.GetBlame(ctx, file, c, blobHashes[file])
 					if err == nil {
 						resultsChan <- fileBlame{Path: file, Data: blameData}
 					}
@@ -113,6 +135,17 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 	go func() {
 		wg.Wait()
 		close(resultsChan)
+	}()
+
+	allResults := make(chan fileBlame, len(files))
+	go func() {
+		for _, fb := range cachedBlames {
+			allResults <- fb
+		}
+		for res := range resultsChan {
+			allResults <- res
+		}
+		close(allResults)
 	}()
 
 	authors := make(map[string]*models.AuthorMetrics)
@@ -171,7 +204,7 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 		allTimestamps = append(allTimestamps, commit.Date.Unix())
 	}
 
-	for res := range resultsChan {
+	for res := range allResults {
 		path := res.Path
 		blame := res.Data
 		if len(blame.AuthorLines) > 0 {
