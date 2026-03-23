@@ -18,6 +18,7 @@ type Config struct {
 	Format     string
 	NoHours    bool
 	NoProgress bool
+	NoCache    bool
 	Days       int
 	ShowAll    bool
 	ShowSilos  bool

@@ -8,6 +8,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"github.com/chege/git-lord/internal/cache"
 )
 
 // BlameData holds the timestamps of lines per author for a specific file.
@@ -15,18 +17,15 @@ type BlameData struct {
 	AuthorLines map[string][]int64
 }
 
-// GetBlame parsers git blame natively overhead-free.
-func GetBlame(ctx context.Context, filePath string) (BlameData, error) {
+// GetBlame parses git blame natively overhead-free.
+func GetBlame(ctx context.Context, filePath string, c *cache.Cache, blobHash string) (BlameData, error) {
 	data := BlameData{
 		AuthorLines: make(map[string][]int64),
 	}
 
-	// Add a safety timeout per file
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 
-	// -M: Detect renames within the commit
-	// -C: Detect lines moved or copied from other files in the same commit
 	cmd := exec.CommandContext(ctx, "git", "blame", "-M", "-C", "--line-porcelain", filePath)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -34,8 +33,6 @@ func GetBlame(ctx context.Context, filePath string) (BlameData, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		// git blame exits with non-zero on some empty files, which we can ignore.
-		// However, we should return other legitimate errors.
 		if !strings.Contains(stderr.String(), "no such path") &&
 			!strings.Contains(stderr.String(), "has no contents") {
 			return data, fmt.Errorf("git blame failed for %s: %w, stderr: %s", filePath, err, stderr.String())
@@ -51,7 +48,6 @@ func GetBlame(ctx context.Context, filePath string) (BlameData, error) {
 	for scanner.Scan() {
 		line := scanner.Text()
 		if strings.HasPrefix(line, "\t") {
-			// This is the actual code line
 			email := currentAuthorEmail
 			if email == "" {
 				email = hashToEmail[currentHash]
@@ -64,12 +60,10 @@ func GetBlame(ctx context.Context, filePath string) (BlameData, error) {
 			if email != "" && !strings.Contains(email, "not.committed.yet") {
 				data.AuthorLines[email] = append(data.AuthorLines[email], ts)
 			}
-			// Reset for the next blame block
 			currentHash = ""
 			currentAuthorEmail = ""
 			currentTimestamp = 0
 		} else if currentHash == "" {
-			// First line of a block starts with the commit hash
 			parts := strings.SplitN(line, " ", 2)
 			currentHash = parts[0]
 		} else if strings.HasPrefix(line, "author-mail ") {
@@ -83,6 +77,10 @@ func GetBlame(ctx context.Context, filePath string) (BlameData, error) {
 			_, _ = fmt.Sscanf(tsStr, "%d", &currentTimestamp)
 			hashToTs[currentHash] = currentTimestamp
 		}
+	}
+
+	if c != nil && blobHash != "" {
+		c.Set(filePath, blobHash, data.AuthorLines)
 	}
 
 	return data, nil
