@@ -86,23 +86,33 @@ func ProcessRepository(ctx context.Context, files []string, commits []gitcmd.Com
 	}
 
 	var blobHashes map[string]string
+	cacheCheckStart := time.Now()
 	if c != nil && len(files) > 0 {
 		blobHashes, _ = cache.GetBlobHashesBatch(files)
 	}
 
 	filesToProcess := make([]string, 0, len(files))
 	var cachedBlames []fileBlame
+	cacheHits := 0
+	cacheMisses := 0
 
 	for _, file := range files {
 		if c != nil {
 			if hash, ok := blobHashes[file]; ok {
 				if cached, found := c.Get(file, hash); found {
 					cachedBlames = append(cachedBlames, fileBlame{Path: file, Data: gitcmd.BlameData{AuthorLines: cached}})
+					cacheHits++
 					continue
 				}
 			}
 		}
 		filesToProcess = append(filesToProcess, file)
+		cacheMisses++
+	}
+
+	if showProgress && c != nil {
+		fmt.Fprintf(os.Stderr, "[CACHE] Files: %d | Hits: %d | Misses: %d | Check time: %v\n",
+			len(files), cacheHits, cacheMisses, time.Since(cacheCheckStart))
 	}
 
 	filesChan := make(chan string, len(filesToProcess))
