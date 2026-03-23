@@ -23,6 +23,7 @@ type Config struct {
 	ShowSilos  bool
 	ShowSocial bool
 	MinLOC     int
+	Window     int // Analysis window in days for hotspot command
 	Version    bool
 }
 

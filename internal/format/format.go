@@ -456,3 +456,95 @@ func PrintCSV(stats []models.AuthorStat, cfg models.Config) error {
 	w.Flush()
 	return w.Error()
 }
+
+// PrintHotspots formats the hotspot analysis report.
+func PrintHotspots(report models.HotspotReport) {
+	// Filter hotspots with score >= 35
+	var filtered []models.HotspotRecord
+	for _, h := range report.Hotspots {
+		if h.Score >= 35 {
+			filtered = append(filtered, h)
+		}
+	}
+
+	if len(filtered) == 0 {
+		fmt.Println("\n✅ No high-risk hotspots found in this window.")
+		return
+	}
+
+	// Take top 15
+	if len(filtered) > 15 {
+		filtered = filtered[:15]
+	}
+
+	t := newTableWriter(text.FgRed)
+
+	t.AppendHeader(table.Row{"Risk", "Path", "Score", "LOC", "Recent Churn", "Primary Owner", "Ownership%"})
+
+	for _, h := range filtered {
+		var riskColor text.Color
+		switch h.Risk {
+		case "CRITICAL":
+			riskColor = text.FgRed
+		case "HIGH":
+			riskColor = text.FgHiRed
+		case "MEDIUM":
+			riskColor = text.FgYellow
+		case "WATCH":
+			riskColor = text.FgBlue
+		default:
+			riskColor = text.FgGreen
+		}
+
+		t.AppendRow(table.Row{
+			riskColor.Sprint(h.Risk),
+			h.Path,
+			h.Score,
+			h.LOC,
+			h.RecentChurn,
+			h.PrimaryOwner,
+			fmt.Sprintf("%.1f%%", h.OwnershipPct),
+		})
+	}
+
+	t.Render()
+}
+
+// PrintHotspotsJSON formats hotspot report to JSON.
+func PrintHotspotsJSON(report models.HotspotReport) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(report)
+}
+
+// PrintHotspotsCSV formats hotspot report to CSV.
+func PrintHotspotsCSV(report models.HotspotReport) error {
+	w := csv.NewWriter(os.Stdout)
+	header := []string{"path", "score", "risk", "loc", "recent_churn", "recent_commits", "primary_owner", "owner_lines", "ownership_pct", "active_owners", "churn_score", "ownership_score", "size_score"}
+	if err := w.Write(header); err != nil {
+		return err
+	}
+
+	for _, h := range report.Hotspots {
+		row := []string{
+			h.Path,
+			fmt.Sprintf("%d", h.Score),
+			h.Risk,
+			fmt.Sprintf("%d", h.LOC),
+			fmt.Sprintf("%d", h.RecentChurn),
+			fmt.Sprintf("%d", h.RecentCommits),
+			h.PrimaryOwner,
+			fmt.Sprintf("%d", h.OwnerLines),
+			fmt.Sprintf("%.2f", h.OwnershipPct),
+			fmt.Sprintf("%d", h.ActiveOwners),
+			fmt.Sprintf("%d", h.ChurnScore),
+			fmt.Sprintf("%d", h.OwnershipScore),
+			fmt.Sprintf("%d", h.SizeScore),
+		}
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+	w.Flush()
+	return w.Error()
+}
