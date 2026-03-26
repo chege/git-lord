@@ -2,6 +2,7 @@ bin/
 .idea/
 
 # Test coverage files
+*.out
 cover.out
 coverage.out
 *.coverprofile
