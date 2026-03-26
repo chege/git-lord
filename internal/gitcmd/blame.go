@@ -23,8 +23,6 @@ func GetBlame(ctx context.Context, filePath string, c *cache.Cache, blobHash str
 		AuthorLines: make(map[string][]int64),
 	}
 
-	fmt.Printf("[BLAME] git blame %s\n", filePath)
-
 	ctx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 

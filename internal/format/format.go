@@ -548,3 +548,263 @@ func PrintHotspotsCSV(report models.HotspotReport) error {
 	w.Flush()
 	return w.Error()
 }
+
+func PrintMarkdown(stats []models.AuthorStat, global models.GlobalMetrics, cfg models.Config) error {
+	fmt.Print("## 👑 Git-Lord Ownership Leaderboard\n\n")
+
+	window := "All-time"
+	if cfg.Since != "" {
+		window = cfg.Since
+	}
+	fmt.Printf("**Window:** %s\n\n", window)
+	fmt.Printf("**Total:** %d commits across %d files\n\n", global.TotalCommits, global.TotalFiles)
+
+	cols := getColumns(global, cfg)
+
+	fmt.Print("| ")
+	for i, c := range cols {
+		if i > 0 {
+			fmt.Print(" | ")
+		}
+		fmt.Print(c.Header)
+	}
+	fmt.Println(" |")
+
+	fmt.Print("| ")
+	for i := range cols {
+		if i > 0 {
+			fmt.Print(" | ")
+		}
+		fmt.Print("---")
+	}
+	fmt.Println(" |")
+
+	for _, p := range stats {
+		fmt.Print("| ")
+		for i, c := range cols {
+			if i > 0 {
+				fmt.Print(" | ")
+			}
+			fmt.Print(c.ValueFunc(p))
+		}
+		fmt.Println(" |")
+	}
+
+	fmt.Print("| ")
+	for i, c := range cols {
+		if i > 0 {
+			fmt.Print(" | ")
+		}
+		fmt.Printf("**%s**", c.Footer)
+	}
+	fmt.Println(" |")
+
+	return nil
+}
+
+func PrintPulseMarkdown(stats []models.PulseStat) error {
+	fmt.Print("## ⚡ Git-Lord Activity Pulse\n\n")
+
+	cols := getPulseColumns()
+	total := summarizePulse(stats)
+
+	fmt.Print("| ")
+	for i, c := range cols {
+		if i > 0 {
+			fmt.Print(" | ")
+		}
+		fmt.Print(c.Header)
+	}
+	fmt.Println(" |")
+
+	fmt.Print("| ")
+	for range cols {
+		fmt.Print("--- | ")
+	}
+	fmt.Println()
+
+	for _, p := range stats {
+		fmt.Print("| ")
+		for i, c := range cols {
+			if i > 0 {
+				fmt.Print(" | ")
+			}
+			if c.Header == "Net" {
+				sign := "+"
+				if p.Net < 0 {
+					sign = ""
+				}
+				fmt.Printf("%s%d", sign, p.Net)
+			} else {
+				fmt.Print(c.ValueFunc(p))
+			}
+		}
+		fmt.Println(" |")
+	}
+
+	fmt.Print("| ")
+	for i, c := range cols {
+		if i > 0 {
+			fmt.Print(" | ")
+		}
+		if c.Header == "Net" {
+			sign := "+"
+			if total.Net < 0 {
+				sign = ""
+			}
+			fmt.Printf("**%s%d**", sign, total.Net)
+		} else {
+			fmt.Printf("**%s**", c.Footer(total))
+		}
+	}
+	fmt.Println(" |")
+
+	return nil
+}
+
+func PrintAwardsMarkdown(awards []models.Award) error {
+	fmt.Print("## 🏆 The Awards Ceremony\n\n")
+
+	for _, a := range awards {
+		fmt.Printf("### %s %s\n\n", a.Emoji, a.Title)
+		fmt.Printf("- **Winner:** %s\n", a.Winner)
+		fmt.Printf("- **Meaning:** %s\n", a.Description)
+		fmt.Printf("- **Vibe:** %s\n", a.Vibe)
+		fmt.Printf("- **Stat:** %s\n\n", a.Value)
+	}
+
+	return nil
+}
+
+func PrintHotspotsMarkdown(report models.HotspotReport) error {
+	var filtered []models.HotspotRecord
+	for _, h := range report.Hotspots {
+		if h.Score >= 35 {
+			filtered = append(filtered, h)
+		}
+	}
+
+	if len(filtered) == 0 {
+		fmt.Print("## 🔥 Git-Lord Hotspot Analysis\n\n")
+		fmt.Println("✅ No high-risk hotspots found in this window.")
+		return nil
+	}
+
+	if len(filtered) > 15 {
+		filtered = filtered[:15]
+	}
+
+	fmt.Print("## 🔥 Git-Lord Hotspot Analysis\n\n")
+	fmt.Printf("**Analysis Window:** %d days\n\n", report.WindowDays)
+
+	fmt.Println("| Risk | Path | Score | LOC | Recent Churn | Primary Owner | Ownership % |")
+	fmt.Println("|------|------|-------|-----|--------------|---------------|-------------|")
+
+	for _, h := range filtered {
+		riskEmoji := "🟢"
+		switch h.Risk {
+		case "CRITICAL":
+			riskEmoji = "🔴"
+		case "HIGH":
+			riskEmoji = "🟠"
+		case "MEDIUM":
+			riskEmoji = "🟡"
+		case "WATCH":
+			riskEmoji = "🔵"
+		}
+
+		fmt.Printf("| %s %s | %s | %d | %d | %d | %s | %.1f%% |\n",
+			riskEmoji, h.Risk, h.Path, h.Score, h.LOC, h.RecentChurn, h.PrimaryOwner, h.OwnershipPct)
+	}
+
+	return nil
+}
+
+func PrintCommitHygiene(report models.CommitHygieneReport) {
+	t := newTableWriter(text.FgCyan)
+
+	t.AppendHeader(table.Row{"Author", "Commits", "Score", "Too Short", "Vague", "Conventional", "Issue Refs", "Has Body"})
+
+	for _, r := range report.Authors {
+		scoreColor := text.FgGreen
+		if r.HygieneScore < 70 {
+			scoreColor = text.FgYellow
+		}
+		if r.HygieneScore < 50 {
+			scoreColor = text.FgRed
+		}
+
+		t.AppendRow(table.Row{
+			r.Author,
+			r.TotalCommits,
+			scoreColor.Sprintf("%.0f", r.HygieneScore),
+			fmt.Sprintf("%d (%.0f%%)", r.TooShort, r.TooShortPct),
+			fmt.Sprintf("%d (%.0f%%)", r.VagueMessages, r.VaguePct),
+			fmt.Sprintf("%.0f%%", r.ConventionalPct),
+			fmt.Sprintf("%.0f%%", r.IssueRefPct),
+			fmt.Sprintf("%.0f%%", r.BodyPct),
+		})
+	}
+
+	t.Render()
+}
+
+func PrintCommitHygieneJSON(report models.CommitHygieneReport) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(report)
+}
+
+func PrintCommitHygieneCSV(report models.CommitHygieneReport) error {
+	w := csv.NewWriter(os.Stdout)
+	header := []string{"author", "email", "total_commits", "hygiene_score", "too_short", "too_short_pct", "vague_messages", "vague_pct", "conventional_pct", "issue_ref_pct", "has_body_pct", "avg_message_length"}
+	if err := w.Write(header); err != nil {
+		return err
+	}
+
+	for _, r := range report.Authors {
+		row := []string{
+			r.Author,
+			r.Email,
+			fmt.Sprintf("%d", r.TotalCommits),
+			fmt.Sprintf("%.2f", r.HygieneScore),
+			fmt.Sprintf("%d", r.TooShort),
+			fmt.Sprintf("%.2f", r.TooShortPct),
+			fmt.Sprintf("%d", r.VagueMessages),
+			fmt.Sprintf("%.2f", r.VaguePct),
+			fmt.Sprintf("%.2f", r.ConventionalPct),
+			fmt.Sprintf("%.2f", r.IssueRefPct),
+			fmt.Sprintf("%.2f", r.BodyPct),
+			fmt.Sprintf("%.2f", r.AvgMessageLength),
+		}
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+	w.Flush()
+	return w.Error()
+}
+
+func PrintCommitHygieneMarkdown(report models.CommitHygieneReport) error {
+	fmt.Print("## 🧼 Git-Lord Commit Message Hygiene\n\n")
+
+	fmt.Println("| Author | Commits | Score | Too Short | Vague | Conventional | Issue Refs | Has Body |")
+	fmt.Println("|--------|---------|-------|-----------|-------|--------------|------------|----------|")
+
+	for _, r := range report.Authors {
+		scoreEmoji := "🟢"
+		if r.HygieneScore < 70 {
+			scoreEmoji = "🟡"
+		}
+		if r.HygieneScore < 50 {
+			scoreEmoji = "🔴"
+		}
+
+		fmt.Printf("| %s | %d | %s %.0f | %d (%.0f%%) | %d (%.0f%%) | %.0f%% | %.0f%% | %.0f%% |\n",
+			r.Author, r.TotalCommits, scoreEmoji, r.HygieneScore,
+			r.TooShort, r.TooShortPct, r.VagueMessages, r.VaguePct,
+			r.ConventionalPct, r.IssueRefPct, r.BodyPct)
+	}
+
+	return nil
+}

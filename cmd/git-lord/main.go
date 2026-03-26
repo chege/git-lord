@@ -48,6 +48,9 @@ func main() {
 	setupGlobalFlags(hotspotFs, &cfg)
 	hotspotFs.IntVar(&cfg.Window, "window", 30, "Analysis window in days")
 
+	hygieneFs := flag.NewFlagSet("hygiene", flag.ExitOnError)
+	setupGlobalFlags(hygieneFs, &cfg)
+
 	rootFs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: git-lord [command] [options]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
@@ -58,6 +61,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  silos      Show high-risk files with low bus factor\n")
 		fmt.Fprintf(os.Stderr, "  trends     Show repository growth trends by month\n")
 		fmt.Fprintf(os.Stderr, "  hotspot    Show high-churn concentration risk files\n")
+		fmt.Fprintf(os.Stderr, "  hygiene    Analyze commit message quality and hygiene\n")
 		fmt.Fprintf(os.Stderr, "  help       Show this help screen\n\n")
 		fmt.Fprintf(os.Stderr, "Leaderboard Options:\n")
 		rootFs.PrintDefaults()
@@ -74,6 +78,17 @@ func main() {
 		fmt.Fprintf(os.Stderr, "Usage: git-lord awards [options]\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		awardFs.PrintDefaults()
+	}
+
+	hygieneFs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: git-lord hygiene [options]\n\n")
+		fmt.Fprintf(os.Stderr, "Analyzes commit message quality including:\n")
+		fmt.Fprintf(os.Stderr, "  - Message length and clarity\n")
+		fmt.Fprintf(os.Stderr, "  - Conventional commit format\n")
+		fmt.Fprintf(os.Stderr, "  - Issue reference presence\n")
+		fmt.Fprintf(os.Stderr, "  - Commit body descriptions\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		hygieneFs.PrintDefaults()
 	}
 
 	ctx := context.Background()
@@ -139,6 +154,13 @@ func main() {
 		}
 		cfg.Since = fmt.Sprintf("%d days ago", cfg.Window)
 		handleError(runHotspot(ctx, cfg))
+	case "hygiene":
+		_ = hygieneFs.Parse(os.Args[2:])
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
+		handleError(runHygiene(ctx, cfg))
 	case "help":
 		rootFs.Usage()
 	case "-h", "--help":
@@ -430,6 +452,31 @@ func runHotspot(ctx context.Context, cfg models.Config) error {
 		return format.PrintHotspotsCSV(hotspots)
 	default:
 		format.PrintHotspots(hotspots)
+	}
+	return nil
+}
+
+func runHygiene(ctx context.Context, cfg models.Config) error {
+	_, commits, err := gatherData(ctx, cfg, false)
+	if err != nil {
+		return err
+	}
+
+	if cfg.Format == "table" {
+		format.PrintReportHeader("Commit Message Hygiene", cfg.Since, 0, len(commits))
+	}
+
+	hygiene := processor.ProcessCommitHygiene(commits)
+
+	switch cfg.Format {
+	case "json":
+		return format.PrintCommitHygieneJSON(hygiene)
+	case "csv":
+		return format.PrintCommitHygieneCSV(hygiene)
+	case "markdown":
+		return format.PrintCommitHygieneMarkdown(hygiene)
+	default:
+		format.PrintCommitHygiene(hygiene)
 	}
 	return nil
 }

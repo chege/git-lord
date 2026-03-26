@@ -43,6 +43,14 @@ Behavioral analysis turned into a game.
 - **Legacy:** Breakdown your surviving lines by the year they were written.
 - **Silos:** A "Risk Map" identifying large files owned by only one person.
 
+### 🧼 Commit Hygiene (`git lord hygiene`)
+Analyzes commit message quality across the team:
+- **Too Short:** Subject lines under 15 characters or fewer than 3 words
+- **Vague Messages:** Generic terms like "fix", "update", "wip"
+- **Conventional Format:** Compliance with conventional commits (feat:, fix:, etc.)
+- **Issue References:** Presence of ticket/bug references
+- **Commit Body:** Commits with descriptive body text
+
 ---
 
 ## 📦 Installation
@@ -72,6 +80,14 @@ git lord pulse --days 30 --format csv
 
 # The trophy cabinet
 git lord awards
+
+# Generate markdown reports for documentation or CI/CD
+git lord --format markdown > CONTRIBUTORS.md
+git lord pulse --days 14 --format markdown > PULSE_REPORT.md
+
+# Analyze commit message hygiene
+git lord hygiene
+git lord hygiene --format markdown > HYGIENE_REPORT.md
 ```
 
 ### Churn-focused pulse workflows

@@ -149,6 +149,28 @@ type HotspotReport struct {
 	Hotspots   []HotspotRecord `json:"hotspots"`
 }
 
+type CommitHygieneRecord struct {
+	Author              string  `json:"author"`
+	Email               string  `json:"email"`
+	TotalCommits        int     `json:"total_commits"`
+	TooShort            int     `json:"too_short"`
+	TooShortPct         float64 `json:"too_short_pct"`
+	VagueMessages       int     `json:"vague_messages"`
+	VaguePct            float64 `json:"vague_pct"`
+	MissingConventional int     `json:"missing_conventional"`
+	ConventionalPct     float64 `json:"conventional_pct"`
+	MissingIssueRef     int     `json:"missing_issue_ref"`
+	IssueRefPct         float64 `json:"issue_ref_pct"`
+	HasBody             int     `json:"has_body"`
+	BodyPct             float64 `json:"body_pct"`
+	AvgMessageLength    float64 `json:"avg_message_length"`
+	HygieneScore        float64 `json:"hygiene_score"`
+}
+
+type CommitHygieneReport struct {
+	Authors []CommitHygieneRecord `json:"authors"`
+}
+
 // CommitData is an alias to avoid circular dependencies if needed,
 // but for now we'll just import gitcmd.
 type CommitData = gitcmd.CommitData
