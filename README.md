@@ -51,6 +51,43 @@ Analyzes commit message quality across the team:
 - **Issue References:** Presence of ticket/bug references
 - **Commit Body:** Commits with descriptive body text
 
+### 🌿 Branch Health (`git lord branches`)
+Analyzes repository branches to identify cleanup opportunities:
+- **Stale branches**: No commits in configurable days (default 90)
+- **Unmerged branches**: Work not yet merged to default branch
+- **Orphaned branches**: Both stale AND unmerged (abandoned work)
+
+**Usage:**
+```bash
+# Show all branches with health status
+git lord branches
+
+# Filter to stale branches only
+git lord branches --stale --days 90
+
+# Find unmerged feature branches
+git lord branches --unmerged
+
+# Identify abandoned work
+git lord branches --orphaned
+
+# Include remote branches in analysis
+git lord branches --include-remote
+
+# Export report as markdown for documentation
+git lord branches --format markdown > BRANCH_HEALTH.md
+```
+
+**Flags:**
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--stale` | false | Filter to stale branches only |
+| `--unmerged` | false | Filter to unmerged branches only |
+| `--orphaned` | false | Filter to orphaned branches only |
+| `--days` | 90 | Days threshold for stale detection |
+| `--include-remote` | false | Include remote branches in analysis |
+| `--format` | table | Output: table, json, csv, markdown |
+
 ---
 
 ## 📦 Installation

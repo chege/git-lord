@@ -808,3 +808,127 @@ func PrintCommitHygieneMarkdown(report models.CommitHygieneReport) error {
 
 	return nil
 }
+
+func PrintBranchHealth(report models.BranchHealthReport) {
+	t := newTableWriter(text.FgCyan)
+
+	t.AppendHeader(table.Row{"Branch", "Status", "Last Commit", "Author", "Days Old", "Merged", "Behind/Ahead"})
+
+	for _, r := range report.Branches {
+		var badges []string
+		if r.IsStale {
+			badges = append(badges, "stale")
+		}
+		if r.IsUnmerged {
+			badges = append(badges, "unmerged")
+		}
+		if r.IsOrphaned {
+			badges = append(badges, "orphaned")
+		}
+		status := strings.Join(badges, " ")
+		if status == "" {
+			status = "ok"
+		}
+
+		merged := "no"
+		if r.IsMerged {
+			merged = "yes"
+		}
+
+		aheadBehind := fmt.Sprintf("+%d/-%d", r.Ahead, r.Behind)
+
+		t.AppendRow(table.Row{
+			r.Name,
+			status,
+			r.LastCommit.Format("2006-01-02"),
+			r.LastAuthor,
+			r.DaysSinceLastCommit,
+			merged,
+			aheadBehind,
+		})
+	}
+
+	t.Render()
+}
+
+func PrintBranchHealthJSON(report models.BranchHealthReport) error {
+	encoder := json.NewEncoder(os.Stdout)
+	encoder.SetIndent("", "  ")
+	return encoder.Encode(report)
+}
+
+func PrintBranchHealthCSV(report models.BranchHealthReport) error {
+	w := csv.NewWriter(os.Stdout)
+	header := []string{"branch", "is_remote", "is_head", "last_commit", "last_author", "commits", "is_merged", "behind", "ahead", "days_old", "is_stale", "is_unmerged", "is_orphaned"}
+	if err := w.Write(header); err != nil {
+		return err
+	}
+
+	for _, r := range report.Branches {
+		row := []string{
+			r.Name,
+			fmt.Sprintf("%t", r.IsRemote),
+			fmt.Sprintf("%t", r.IsHead),
+			r.LastCommit.Format("2006-01-02"),
+			r.LastAuthor,
+			fmt.Sprintf("%d", r.CommitCount),
+			fmt.Sprintf("%t", r.IsMerged),
+			fmt.Sprintf("%d", r.Behind),
+			fmt.Sprintf("%d", r.Ahead),
+			fmt.Sprintf("%d", r.DaysSinceLastCommit),
+			fmt.Sprintf("%t", r.IsStale),
+			fmt.Sprintf("%t", r.IsUnmerged),
+			fmt.Sprintf("%t", r.IsOrphaned),
+		}
+		if err := w.Write(row); err != nil {
+			return err
+		}
+	}
+	w.Flush()
+	return w.Error()
+}
+
+func PrintBranchHealthMarkdown(report models.BranchHealthReport) error {
+	fmt.Print("## 🌿 Git-Lord Branch Health\n\n")
+	fmt.Printf("**Default Branch:** %s\n\n", report.DefaultBranch)
+	fmt.Printf("**Summary:** %d total, %d stale, %d unmerged, %d orphaned\n\n",
+		report.TotalCount, report.StaleCount, report.UnmergedCount, report.OrphanedCount)
+
+	fmt.Println("| Branch | Status | Last Commit | Author | Days Old | Merged | Behind/Ahead |")
+	fmt.Println("|--------|--------|-------------|--------|----------|--------|--------------|")
+
+	for _, r := range report.Branches {
+		var badges []string
+		if r.IsStale {
+			badges = append(badges, "stale")
+		}
+		if r.IsUnmerged {
+			badges = append(badges, "unmerged")
+		}
+		if r.IsOrphaned {
+			badges = append(badges, "orphaned")
+		}
+		status := strings.Join(badges, " ")
+		if status == "" {
+			status = "ok"
+		}
+
+		merged := "❌"
+		if r.IsMerged {
+			merged = "✅"
+		}
+
+		aheadBehind := fmt.Sprintf("+%d/-%d", r.Ahead, r.Behind)
+
+		fmt.Printf("| %s | %s | %s | %s | %d | %s | %s |\n",
+			r.Name,
+			status,
+			r.LastCommit.Format("2006-01-02"),
+			r.LastAuthor,
+			r.DaysSinceLastCommit,
+			merged,
+			aheadBehind)
+	}
+
+	return nil
+}

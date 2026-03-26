@@ -51,6 +51,16 @@ func main() {
 	hygieneFs := flag.NewFlagSet("hygiene", flag.ExitOnError)
 	setupGlobalFlags(hygieneFs, &cfg)
 
+	branchFs := flag.NewFlagSet("branches", flag.ExitOnError)
+	setupGlobalFlags(branchFs, &cfg)
+	cfg.Days = 90
+	branchFs.BoolVar(&cfg.Stale, "stale", false, "Filter to stale branches only")
+	branchFs.BoolVar(&cfg.Unmerged, "unmerged", false, "Filter to unmerged branches only")
+	branchFs.BoolVar(&cfg.Orphaned, "orphaned", false, "Filter to orphaned branches only")
+	branchFs.BoolVar(&cfg.IncludeRemote, "include-remote", false, "Include remote branches")
+	branchFs.BoolVar(&cfg.Purge, "purge", false, "Delete listed branches after displaying")
+	branchFs.BoolVar(&cfg.Force, "force", false, "Skip confirmation when purging branches")
+
 	rootFs.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage: git-lord [command] [options]\n\n")
 		fmt.Fprintf(os.Stderr, "Commands:\n")
@@ -62,6 +72,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  trends     Show repository growth trends by month\n")
 		fmt.Fprintf(os.Stderr, "  hotspot    Show high-churn concentration risk files\n")
 		fmt.Fprintf(os.Stderr, "  hygiene    Analyze commit message quality and hygiene\n")
+		fmt.Fprintf(os.Stderr, "  branches   Analyze branch health and status\n")
 		fmt.Fprintf(os.Stderr, "  help       Show this help screen\n\n")
 		fmt.Fprintf(os.Stderr, "Leaderboard Options:\n")
 		rootFs.PrintDefaults()
@@ -89,6 +100,18 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  - Commit body descriptions\n\n")
 		fmt.Fprintf(os.Stderr, "Options:\n")
 		hygieneFs.PrintDefaults()
+	}
+
+	branchFs.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: git-lord branches [options]\n\n")
+		fmt.Fprintf(os.Stderr, "Analyzes branch health and status:\n")
+		fmt.Fprintf(os.Stderr, "  - Stale branches (no commits beyond threshold)\n")
+		fmt.Fprintf(os.Stderr, "  - Unmerged branches (not yet merged to default)\n")
+		fmt.Fprintf(os.Stderr, "  - Orphaned branches (stale AND unmerged)\n\n")
+		fmt.Fprintf(os.Stderr, "Use --purge to delete listed branches (requires --force)\n")
+		fmt.Fprintf(os.Stderr, "Safety: Never deletes default branch or current HEAD\n\n")
+		fmt.Fprintf(os.Stderr, "Options:\n")
+		branchFs.PrintDefaults()
 	}
 
 	ctx := context.Background()
@@ -161,6 +184,13 @@ func main() {
 			return
 		}
 		handleError(runHygiene(ctx, cfg))
+	case "branches":
+		_ = branchFs.Parse(os.Args[2:])
+		if cfg.Version {
+			fmt.Printf("git-lord %s\n", version)
+			return
+		}
+		handleError(runBranches(ctx, cfg))
 	case "help":
 		rootFs.Usage()
 	case "-h", "--help":
@@ -485,6 +515,139 @@ func runHygiene(ctx context.Context, cfg models.Config) error {
 		return format.PrintCommitHygieneMarkdown(hygiene)
 	default:
 		format.PrintCommitHygiene(hygiene)
+	}
+	return nil
+}
+
+func runBranches(ctx context.Context, cfg models.Config) error {
+	if err := gitcmd.IsValidRepo(ctx); err != nil {
+		return err
+	}
+
+	report := processor.ProcessBranchHealth(ctx, cfg.Days, cfg.IncludeRemote)
+
+	var filtered []models.BranchHealthRecord
+	for _, b := range report.Branches {
+		if cfg.Stale && !b.IsStale {
+			continue
+		}
+		if cfg.Unmerged && !b.IsUnmerged {
+			continue
+		}
+		if cfg.Orphaned && !b.IsOrphaned {
+			continue
+		}
+		filtered = append(filtered, b)
+	}
+
+	filteredReport := models.BranchHealthReport{
+		Branches:      filtered,
+		DefaultBranch: report.DefaultBranch,
+		TotalCount:    len(filtered),
+	}
+
+	staleCount := 0
+	unmergedCount := 0
+	orphanedCount := 0
+	for _, b := range filtered {
+		if b.IsStale {
+			staleCount++
+		}
+		if b.IsUnmerged {
+			unmergedCount++
+		}
+		if b.IsOrphaned {
+			orphanedCount++
+		}
+	}
+	filteredReport.StaleCount = staleCount
+	filteredReport.UnmergedCount = unmergedCount
+	filteredReport.OrphanedCount = orphanedCount
+
+	switch cfg.Format {
+	case "json":
+		_ = format.PrintBranchHealthJSON(filteredReport)
+	case "csv":
+		_ = format.PrintBranchHealthCSV(filteredReport)
+	case "markdown":
+		_ = format.PrintBranchHealthMarkdown(filteredReport)
+	default:
+		format.PrintBranchHealth(filteredReport)
+	}
+
+	// Handle purge mode
+	if cfg.Purge && len(filtered) > 0 {
+		return purgeBranches(ctx, filtered, filteredReport.DefaultBranch, cfg.Force)
+	}
+
+	return nil
+}
+
+// purgeBranches deletes the listed branches with safety checks.
+func purgeBranches(ctx context.Context, branches []models.BranchHealthRecord, defaultBranch string, force bool) error {
+	// Get current branch to protect it
+	currentBranch, err := gitcmd.GetCurrentBranch(ctx)
+	if err != nil {
+		return fmt.Errorf("cannot determine current branch: %w", err)
+	}
+
+	// Filter out protected branches
+	var toDelete []models.BranchHealthRecord
+	for _, b := range branches {
+		if b.Name == defaultBranch {
+			fmt.Fprintf(os.Stderr, "Skipping default branch: %s\n", b.Name)
+			continue
+		}
+		if b.Name == currentBranch {
+			fmt.Fprintf(os.Stderr, "Skipping current branch: %s\n", b.Name)
+			continue
+		}
+		if b.IsHead {
+			fmt.Fprintf(os.Stderr, "Skipping HEAD branch: %s\n", b.Name)
+			continue
+		}
+		toDelete = append(toDelete, b)
+	}
+
+	if len(toDelete) == 0 {
+		fmt.Fprintln(os.Stderr, "No branches to delete (all were protected)")
+		return nil
+	}
+
+	// Show preview
+	fmt.Fprintf(os.Stderr, "\n⚠️  Will delete %d branch(es):\n", len(toDelete))
+	for _, b := range toDelete {
+		status := ""
+		if b.IsStale {
+			status += "stale "
+		}
+		if b.IsUnmerged {
+			status += "unmerged "
+		}
+		fmt.Fprintf(os.Stderr, "  - %s (%s- %d days old)\n", b.Name, status, b.DaysSinceLastCommit)
+	}
+
+	if !force {
+		fmt.Fprintln(os.Stderr, "\nUse --force to actually delete these branches")
+		return nil
+	}
+
+	// Delete branches
+	fmt.Fprintln(os.Stderr, "\nDeleting branches...")
+	var deleted, failed int
+	for _, b := range toDelete {
+		if err := gitcmd.DeleteBranch(ctx, b.Name, true); err != nil {
+			fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", b.Name, err)
+			failed++
+		} else {
+			fmt.Fprintf(os.Stderr, "  ✓ %s\n", b.Name)
+			deleted++
+		}
+	}
+
+	fmt.Fprintf(os.Stderr, "\nDeleted: %d, Failed: %d\n", deleted, failed)
+	if failed > 0 {
+		return fmt.Errorf("some branches could not be deleted")
 	}
 	return nil
 }
