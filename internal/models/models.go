@@ -1,6 +1,10 @@
 package models
 
-import "github.com/chege/git-lord/internal/gitcmd"
+import (
+	"time"
+
+	"github.com/chege/git-lord/internal/gitcmd"
+)
 
 // Award Thresholds
 const (
@@ -26,6 +30,13 @@ type Config struct {
 	MinLOC     int
 	Window     int // Analysis window in days for hotspot command
 	Version    bool
+	// Branch-specific flags
+	Stale         bool
+	Unmerged      bool
+	Orphaned      bool
+	IncludeRemote bool
+	Purge         bool // Delete branches after listing
+	Force         bool // Skip confirmation prompts
 }
 
 // AuthorMetrics holds all statistics for a single author.
@@ -169,6 +180,35 @@ type CommitHygieneRecord struct {
 
 type CommitHygieneReport struct {
 	Authors []CommitHygieneRecord `json:"authors"`
+}
+
+// BranchHealthRecord holds health metrics for a single branch.
+type BranchHealthRecord struct {
+	Name                string    `json:"name"`
+	IsRemote            bool      `json:"is_remote"`
+	IsHead              bool      `json:"is_head"`
+	LastCommit          time.Time `json:"last_commit"`
+	LastAuthor          string    `json:"last_author"`
+	LastSubject         string    `json:"last_subject"`
+	CommitCount         int       `json:"commit_count"`
+	IsMerged            bool      `json:"is_merged"`
+	Behind              int       `json:"behind"`
+	Ahead               int       `json:"ahead"`
+	DaysSinceLastCommit int       `json:"days_since_last_commit"`
+	StaleDays           int       `json:"stale_days"`
+	IsStale             bool      `json:"is_stale"`
+	IsUnmerged          bool      `json:"is_unmerged"`
+	IsOrphaned          bool      `json:"is_orphaned"`
+}
+
+// BranchHealthReport is the aggregate report for branch health analysis.
+type BranchHealthReport struct {
+	Branches      []BranchHealthRecord `json:"branches"`
+	DefaultBranch string               `json:"default_branch"`
+	TotalCount    int                  `json:"total_count"`
+	StaleCount    int                  `json:"stale_count"`
+	UnmergedCount int                  `json:"unmerged_count"`
+	OrphanedCount int                  `json:"orphaned_count"`
 }
 
 // CommitData is an alias to avoid circular dependencies if needed,
