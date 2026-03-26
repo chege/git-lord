@@ -188,7 +188,7 @@ func setupGlobalFlags(fs *flag.FlagSet, cfg *models.Config) {
 	fs.StringVar(&cfg.Since, "since", "", "Filter by date")
 	fs.StringVar(&cfg.Include, "include", "", "Include glob pattern")
 	fs.StringVar(&cfg.Exclude, "exclude", "", "Exclude glob pattern")
-	fs.StringVar(&cfg.Format, "format", "table", "Output format: table, json, csv")
+	fs.StringVar(&cfg.Format, "format", "table", "Output format: table, json, csv, markdown")
 	fs.BoolVar(&cfg.NoHours, "no-hours", false, "Disable hours calculation")
 	fs.BoolVar(&cfg.NoProgress, "no-progress", false, "Disable progress bar")
 	fs.BoolVar(&cfg.NoCache, "no-cache", false, "Disable caching of blame data")
@@ -265,6 +265,8 @@ func runLeaderboard(ctx context.Context, cfg models.Config) error {
 		return format.PrintJSON(stats, result.Global)
 	case "csv":
 		return format.PrintCSV(stats, cfg)
+	case "markdown":
+		return format.PrintMarkdown(stats, result.Global, cfg)
 	default:
 		format.PrintTable(stats, result.Global, cfg)
 	}
@@ -293,6 +295,8 @@ func runPulse(ctx context.Context, cfg models.Config) error {
 		return format.PrintPulseJSON(stats)
 	case "csv":
 		return format.PrintPulseCSV(stats)
+	case "markdown":
+		return format.PrintPulseMarkdown(stats)
 	default:
 		format.PrintPulse(stats)
 	}
@@ -408,6 +412,8 @@ func runAwards(ctx context.Context, cfg models.Config) error {
 		return format.PrintAwardsJSON(awards)
 	case "csv":
 		return format.PrintAwardsCSV(awards)
+	case "markdown":
+		return format.PrintAwardsMarkdown(awards)
 	default:
 		format.PrintAwards(awards)
 	}
@@ -450,6 +456,8 @@ func runHotspot(ctx context.Context, cfg models.Config) error {
 		return format.PrintHotspotsJSON(hotspots)
 	case "csv":
 		return format.PrintHotspotsCSV(hotspots)
+	case "markdown":
+		return format.PrintHotspotsMarkdown(hotspots)
 	default:
 		format.PrintHotspots(hotspots)
 	}
