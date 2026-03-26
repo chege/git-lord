@@ -99,3 +99,36 @@ jobs:
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           go tool cover -func=cover.out >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build git-lord
+        run: make build
+
+      - name: Check commit message hygiene
+        run: |
+          echo "## 🧼 Commit Message Hygiene Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          ./bin/git-lord hygiene --format markdown --no-progress >> $GITHUB_STEP_SUMMARY
+          
+          # Get the lowest hygiene score
+          lowest_score=$(./bin/git-lord hygiene --format json --no-progress | jq -r '.authors | min_by(.hygiene_score) | .hygiene_score')
+          echo "Lowest hygiene score: $lowest_score"
+          
+          # Fail if any author has score below 50
+          if (( $(echo "$lowest_score < 50" | bc -l) )); then
+            echo "::error::Commit message hygiene score below threshold (50). Please improve commit messages."
+            exit 1
+          fi
