@@ -2,6 +2,7 @@
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/chege/git-lord)](https://goreportcard.com/report/github.com/chege/git-lord)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![gitcgr](https://gitcgr.com/badge/chege/git-lord.svg)](https://gitcgr.com/chege/git-lord)
 
 **High-performance Git contributor intelligence suite.** 
 
