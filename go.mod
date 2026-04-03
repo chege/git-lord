@@ -2,7 +2,7 @@ module github.com/chege/git-lord
 
 go 1.25.5
 
-require github.com/jedib0t/go-pretty/v6 v6.7.8
+require github.com/jedib0t/go-pretty/v6 v6.7.9
 
 require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
