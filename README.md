@@ -88,9 +88,30 @@ git lord branches --format markdown > BRANCH_HEALTH.md
 | `--include-remote` | false | Include remote branches in analysis |
 | `--format` | table | Output: table, json, csv, markdown |
 
+### 🕵️ Bug Triage (`git lord suspects`)
+Ranks likely bug-introducing commits for one tracked text file.
+- **Single File Focus:** Investigate one current-path file at a time.
+- **Transparent Scoring:** See recency, file churn, ownership familiarity, and message-risk components.
+- **Read-Only Workflow:** Produces a shortlist for manual regression testing; it does not run `git bisect`.
+
 ---
 
 ## 📦 Installation
+
+### Using Homebrew (Recommended)
+
+```bash
+brew tap chege/tap
+brew install git-lord
+```
+
+Or install directly:
+
+```bash
+brew install chege/tap/git-lord
+```
+
+### Using Go
 
 Install the latest version directly to your `$GOBIN`:
 
@@ -125,7 +146,38 @@ git lord pulse --days 14 --format markdown > PULSE_REPORT.md
 # Analyze commit message hygiene
 git lord hygiene
 git lord hygiene --format markdown > HYGIENE_REPORT.md
+
+# Rank likely suspect commits for a file before manual triage
+git lord suspects target.go
+
+# Export suspect commits as JSON for scripts or notes
+git lord suspects target.go --format json --limit 5
 ```
+
+### Bug triage suspect workflows
+
+Use `git lord suspects` when you already know the file that is misbehaving and want a shortlist of commits to test manually.
+
+```bash
+# Start with the default ranked shortlist for one tracked file
+git lord suspects internal/api/handler.go
+
+# Narrow the search to a known regression window
+git lord suspects internal/api/handler.go --since 2026-03-01
+
+# Sort by raw target-file churn instead of the blended score
+git lord suspects internal/api/handler.go --sort churn
+
+# Sort by newest-first when recency matters more than churn
+git lord suspects internal/api/handler.go --sort date
+
+# Save a machine-readable shortlist for incident notes or scripts
+git lord suspects internal/api/handler.go --format json --limit 10
+```
+
+- `git lord suspects` is intentionally **single-file only** in v1.
+- The command uses the file’s **current path name only** and does **not** follow renames in v1.
+- The output is a **read-only shortlist** for manual triage; it does **not** modify the repo or run `git bisect`.
 
 ### Churn-focused pulse workflows
 
@@ -165,7 +217,7 @@ git lord pulse --days 30 --format csv
 | Flag | Default | Description |
 | :--- | :--- | :--- |
 | `--all` | `false` | Show every single metric and column. |
-| `--sort` | `loc` | Sort by command-specific metrics; `pulse` supports `commits`, `additions`, `deletions`, `net`, `churn`, and `files`. |
+| `--sort` | `loc` | Sort by command-specific metrics; `pulse` supports `commits`, `additions`, `deletions`, `net`, `churn`, and `files`, while `suspects` supports `score`, `date`, and `churn`. |
 | `--format` | `table` | Output: `table`, `json`, `csv`, `markdown`. |
 | `--since` | `""` | Filter by date (e.g. "2023-01-01"). |
 | `--no-progress` | `false` | Hide the ASCII spinner. |

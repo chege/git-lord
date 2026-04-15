@@ -33,8 +33,56 @@ snapshot:
   name_template: "{{ .Version }}-next"
 
 changelog:
+  use: conventional
   sort: asc
+  groups:
+    - title: Features
+      regexp: "^.*feat(?:\\([^)]+\\))?:.*$"
+      order: 0
+    - title: Bug Fixes
+      regexp: "^.*fix(?:\\([^)]+\\))?:.*$"
+      order: 1
+    - title: Documentation
+      regexp: "^.*docs(?:\\([^)]+\\))?:.*$"
+      order: 2
+    - title: Performance Improvements
+      regexp: "^.*perf(?:\\([^)]+\\))?:.*$"
+      order: 3
+    - title: Code Refactoring
+      regexp: "^.*refactor(?:\\([^)]+\\))?:.*$"
+      order: 4
+    - title: Tests
+      regexp: "^.*test(?:\\([^)]+\\))?:.*$"
+      order: 5
+    - title: Build System & CI
+      regexp: "^.*(?:build|ci|chore)(?:\\([^)]+\\))?:.*$"
+      order: 6
+    - title: Other Changes
+      order: 999
   filters:
     exclude:
       - '^docs:'
       - '^test:'
+      - '^chore:'
+      - Merge pull request
+      - Merge branch
+
+brews:
+  - repository:
+      owner: chege
+      name: homebrew-tap
+      branch: main
+      token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    commit_author:
+      name: goreleaserbot
+      email: bot@goreleaser.com
+    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
+    directory: Formula
+    homepage: "https://github.com/chege/git-lord"
+    description: "High-performance Git contributor intelligence suite"
+    license: "MIT"
+    install: |
+      bin.install "git-lord"
+    test: |
+      system "#{bin}/git-lord", "--version"
+    skip_upload: auto
