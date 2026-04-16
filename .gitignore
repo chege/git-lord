@@ -11,3 +11,4 @@ coverage.out
 .dolt/
 *.db
 .beads-credential-key
+dist/

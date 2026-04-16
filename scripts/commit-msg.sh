@@ -6,9 +6,10 @@ COMMIT_MSG_FILE="$1"
 COMMIT_MSG=$(cat "$COMMIT_MSG_FILE")
 
 # Conventional commit pattern
-# Format: type(scope): subject
+# Format: type[(scope)][!]: subject
 # Types: feat, fix, docs, style, refactor, perf, test, build, ci, chore, revert
-PATTERN="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z-]+\))?: .+$"
+# Breaking changes marked with ! before the colon
+PATTERN="^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\([a-z-]+\))?!?: .+$"
 
 # Check if message matches conventional commit format
 if ! echo "$COMMIT_MSG" | grep -qE "$PATTERN"; then

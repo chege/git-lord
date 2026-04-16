@@ -64,7 +64,7 @@ Common scopes for this project:
 - `cli`: Command-line interface and flags
 - `deps`: Dependency updates
 - `release`: Release-related changes
-- `brew`: Homebrew formula updates
+- `brew`: Homebrew cask updates
 
 ## Pull Request Process
 
@@ -93,16 +93,16 @@ Users can install git-lord via Homebrew:
 
 ```bash
 brew tap chege/tap
-brew install git-lord
+brew install --cask git-lord
 ```
 
 Or install directly:
 
 ```bash
-brew install chege/tap/git-lord
+brew install --cask chege/tap/git-lord
 ```
 
-The Homebrew formula is automatically updated when new releases are published.
+The Homebrew cask is automatically updated when new releases are published.
 
 ## Code Style
 

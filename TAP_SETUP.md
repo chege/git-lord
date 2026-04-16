@@ -67,14 +67,14 @@ goreleaser check
 
 3. The release workflow will run. Check the Actions tab to see if it succeeds.
 
-4. After successful release, verify the formula was created:
+4. After successful release, verify the cask was created:
    - Go to https://github.com/chege/homebrew-tap
-   - You should see a `Formula/git-lord.rb` file
+   - You should see a `Casks/git-lord.rb` file
 
 5. Test installation:
    ```bash
    brew tap chege/tap
-   brew install git-lord
+   brew install --cask git-lord
    git-lord --version
    ```
 
@@ -90,8 +90,10 @@ goreleaser check
 1. When you push a tag starting with `v`, the release workflow triggers
 2. GoReleaser builds binaries for all platforms (Linux, macOS, Windows)
 3. GoReleaser creates a GitHub release with the binaries
-4. GoReleaser commits a new formula to the `homebrew-tap` repository
-5. Users can then `brew install chege/tap/git-lord`
+4. GoReleaser commits a new cask to the `homebrew-tap` repository (in the `Casks` directory)
+5. Users can then `brew install --cask chege/tap/git-lord`
+
+Note: This setup uses Homebrew Casks (not Casks) as recommended by GoReleaser v2.10+.
 
 ## Troubleshooting
 
@@ -108,7 +110,7 @@ The tap repository doesn't exist or isn't accessible:
 - Verify `github.com/chege/homebrew-tap` exists
 - Verify it's public (Homebrew requires public taps)
 
-### Formula not updating
+### Cask not updating
 
 Check the release workflow logs:
 1. Go to Actions tab in git-lord repo

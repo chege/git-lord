@@ -24,13 +24,13 @@ archives:
   - name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
     format_overrides:
       - goos: windows
-        format: zip
+        formats: ["zip"]
 
 checksum:
   name_template: 'checksums.txt'
 
 snapshot:
-  name_template: "{{ .Version }}-next"
+  version_template: "{{ .Version }}-next"
 
 changelog:
   use: conventional
@@ -67,22 +67,28 @@ changelog:
       - Merge pull request
       - Merge branch
 
-brews:
-  - repository:
+homebrew_casks:
+  - name: git-lord
+    repository:
       owner: chege
       name: homebrew-tap
       branch: main
       token: "{{ .Env.TAP_GITHUB_TOKEN }}"
+    directory: Casks
     commit_author:
       name: goreleaserbot
       email: bot@goreleaser.com
-    commit_msg_template: "Brew formula update for {{ .ProjectName }} version {{ .Tag }}"
-    directory: Formula
+    commit_msg_template: "Brew cask update for {{ .ProjectName }} version {{ .Tag }}"
     homepage: "https://github.com/chege/git-lord"
     description: "High-performance Git contributor intelligence suite"
-    license: "MIT"
-    install: |
-      bin.install "git-lord"
-    test: |
-      system "#{bin}/git-lord", "--version"
+    binaries:
+      - git-lord
+    url:
+      template: "https://github.com/chege/git-lord/releases/download/{{ .Tag }}/{{ .ArtifactName }}"
     skip_upload: auto
+    hooks:
+      post:
+        install: |
+          if OS.mac?
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/git-lord"]
+          end

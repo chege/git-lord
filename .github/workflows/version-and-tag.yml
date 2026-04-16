@@ -1,0 +1,105 @@
+name: version-and-tag
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.TAP_GITHUB_TOKEN }}
+
+      - name: Determine next version
+        id: version
+        run: |
+          # Get the latest tag or start fresh
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            latest_tag=$(git describe --tags --abbrev=0)
+            echo "Latest tag: $latest_tag"
+            # Get commits since last tag
+            commit_range="$latest_tag..HEAD"
+          else
+            echo "No existing tags, checking all commits"
+            # Get all commits (for first release)
+            commit_range="HEAD"
+          fi
+          
+          # Get subjects only for feat/fix detection
+          subjects=$(git log $commit_range --pretty=format:"%s" --)
+          echo "Subjects analyzed:"
+          echo "$subjects"
+          
+          # Get full commits (subject + body) for BREAKING CHANGE detection
+          full_commits=$(git log $commit_range --pretty=format:"%s%n%b" --)
+          
+          # Check for breaking changes (can be in subject with ! or in body/footer)
+          if echo "$full_commits" | grep -qE "BREAKING CHANGE:|^\w+(\(.+\))?!:"; then
+            bump="major"
+            echo "Breaking change detected - major bump"
+          # Check subjects only for feat/fix (not body)
+          elif echo "$subjects" | grep -qE "^feat(\(.+\))?!?:"; then
+            bump="minor"
+            echo "Feature detected - minor bump"
+          elif echo "$subjects" | grep -qE "^fix(\(.+\))?!?:"; then
+            bump="patch"
+            echo "Fix detected - patch bump"
+          else
+            echo "No release-worthy changes found (only feat/fix/breaking in subject trigger releases)"
+            echo "bump=none" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Get current version or start from 0.0.0
+          if git describe --tags --abbrev=0 >/dev/null 2>&1; then
+            current_version=$(git describe --tags --abbrev=0)
+          else
+            current_version="v0.0.0"
+          fi
+          
+          version=$(echo $current_version | sed 's/v//')
+          major=$(echo $version | cut -d. -f1)
+          minor=$(echo $version | cut -d. -f2)
+          patch=$(echo $version | cut -d. -f3)
+          
+          if [ "$bump" = "major" ]; then
+            major=$((major + 1))
+            minor=0
+            patch=0
+          elif [ "$bump" = "minor" ]; then
+            minor=$((minor + 1))
+            patch=0
+          else
+            patch=$((patch + 1))
+          fi
+          
+          next_version="v$major.$minor.$patch"
+          echo "Next version: $next_version"
+          echo "version=$next_version" >> $GITHUB_OUTPUT
+          echo "bump=$bump" >> $GITHUB_OUTPUT
+
+      - name: Create tag
+        if: steps.version.outputs.bump != 'none'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          # Check if tag already exists (prevent race conditions)
+          if git rev-parse "${{ steps.version.outputs.version }}" >/dev/null 2>&1; then
+            echo "Tag ${{ steps.version.outputs.version }} already exists, skipping"
+            exit 0
+          fi
+          
+          git tag -a ${{ steps.version.outputs.version }} -m "Release ${{ steps.version.outputs.version }}"
+          git push origin ${{ steps.version.outputs.version }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.TAP_GITHUB_TOKEN }}

@@ -102,13 +102,13 @@ Ranks likely bug-introducing commits for one tracked text file.
 
 ```bash
 brew tap chege/tap
-brew install git-lord
+brew install --cask git-lord
 ```
 
 Or install directly:
 
 ```bash
-brew install chege/tap/git-lord
+brew install --cask chege/tap/git-lord
 ```
 
 ### Using Go
