@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 )
 
 var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
@@ -28,14 +29,17 @@ func stripANSI(s string) string {
 	return ansiPattern.ReplaceAllString(s, "")
 }
 
-func setupTestRepo(t *testing.T) string {
+func setupEmptyTestRepo(t *testing.T) (string, func([]string, ...string), func(string, string, string, string)) {
+	t.Helper()
+
 	dir, err := os.MkdirTemp("", "git-lord-test-*")
 	if err != nil {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 
-	// Helper to run git commands
 	runGit := func(env []string, args ...string) {
+		t.Helper()
+
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
 		cmd.Env = testEnv(env...)
@@ -48,6 +52,8 @@ func setupTestRepo(t *testing.T) string {
 	runGit(nil, "init")
 
 	commitAs := func(name, email, date, msg string) {
+		t.Helper()
+
 		env := []string{
 			"GIT_AUTHOR_NAME=" + name,
 			"GIT_AUTHOR_EMAIL=" + email,
@@ -58,6 +64,12 @@ func setupTestRepo(t *testing.T) string {
 		}
 		runGit(env, "commit", "-m", msg)
 	}
+
+	return dir, runGit, commitAs
+}
+
+func setupTestRepo(t *testing.T) string {
+	dir, runGit, commitAs := setupEmptyTestRepo(t)
 
 	// Commit 1 by Alice (Older)
 	file1 := filepath.Join(dir, "file1.txt")
@@ -127,6 +139,57 @@ func setupTestRepo(t *testing.T) string {
 	}
 	runGit(nil, "add", ".")
 	commitAs("Cara", "cara@example.com", "2026-03-04T12:00:00", "Cara refreshes notes")
+
+	return dir
+}
+
+// setupPulseTestRepo keeps Bob's commits inside the last 100 days so pulse
+// tests stay deterministic while still exercising the real time window logic.
+func setupPulseTestRepo(t *testing.T) string {
+	dir, runGit, commitAs := setupEmptyTestRepo(t)
+	now := time.Now().UTC()
+	daysAgo := func(days int) string {
+		return now.AddDate(0, 0, -days).Format(time.RFC3339)
+	}
+
+	file1 := filepath.Join(dir, "file1.txt")
+	if err := os.WriteFile(file1, []byte("line1\nline2\nline3\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	fileAlice := filepath.Join(dir, "alice.txt")
+	if err := os.WriteFile(fileAlice, []byte("alice legacy\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	runGit(nil, "add", ".")
+	commitAs("Alice", "alice@example.com", daysAgo(180), "Initial commit from Alice")
+
+	if err := os.WriteFile(file1, []byte("line1\nline2\nline3\nline4 from bob\nline5 from bob\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	file2 := filepath.Join(dir, "file2.txt")
+	if err := os.WriteFile(file2, []byte("bob line1\nbob line2\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	bobNotes := filepath.Join(dir, "bob_notes.txt")
+	if err := os.WriteFile(bobNotes, []byte("bob note\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	runGit(nil, "add", ".")
+	commitAs("Bob", "bob@example.com", daysAgo(90), "Bob adds lines")
+
+	bobScript := filepath.Join(dir, "deploy.sh")
+	if err := os.WriteFile(bobScript, []byte("#!/bin/sh\necho deploy\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	if err := os.WriteFile(bobNotes, []byte("bob note updated\nbob extra\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	bobOps := filepath.Join(dir, "ops.txt")
+	if err := os.WriteFile(bobOps, []byte("ops\n"), 0644); err != nil {
+		t.Fatalf("failed to write file: %v", err)
+	}
+	runGit(nil, "add", ".")
+	commitAs("Bob", "bob@example.com", daysAgo(60), "Bob adds deploy script")
 
 	return dir
 }
@@ -209,7 +272,7 @@ func TestE2E_BasicMetrics(t *testing.T) {
 }
 
 func TestE2E_Pulse(t *testing.T) {
-	repoDir := setupTestRepo(t)
+	repoDir := setupPulseTestRepo(t)
 	defer func() { _ = os.RemoveAll(repoDir) }()
 
 	binPath := buildGitLord(t)
